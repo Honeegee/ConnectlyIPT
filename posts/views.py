@@ -272,9 +272,31 @@ class LoginView(APIView):
         )
 
 # Keep the home view for API documentation
-def home(request):
+from django.shortcuts import render
+from django.conf import settings
+
+def login_view(request):
+    """Render the Google OAuth login page"""
+    logger = LoggerSingleton().get_logger()
+    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
+    
+    if not client_id:
+        logger.error("Google OAuth client ID is not configured")
+        return render(request, 'posts/login.html', {
+            'error': 'OAuth configuration error'
+        })
+    
+    logger.info(f"Rendering login page with client ID: {client_id[:10]}...")
+    return render(request, 'posts/login.html', {
+        'google_oauth2_client_id': client_id
+    })
+
+class HomeView(APIView):
     """Homepage view showing API documentation"""
-    return Response({
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        return Response({
         "message": "Welcome to Connectly API",
         "endpoints": {
             "users": {

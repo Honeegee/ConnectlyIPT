@@ -1,8 +1,14 @@
 # Connectly API
 
-A Django REST Framework API with enhanced security features and design patterns.
+A Django REST Framework API with enhanced security features and design patterns, utilizing Django's built-in User model for authentication and authorization.
 
 ## Features
+
+### Authentication & User Management
+- Uses Django's built-in User model (`django.contrib.auth.models.User`)
+- Secure password hashing with Argon2
+- Token-based authentication
+- User roles and permissions
 
 - Full CRUD operations for Posts and Comments
 - Role-Based Access Control (RBAC)
@@ -44,9 +50,14 @@ python manage.py runserver_plus --cert-file cert.pem --key-file key.pem
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/users/` - Create user
+### Authentication & Users
+- `POST /api/users/` - Create user (uses Django's User model)
 - `POST /api/login/` - Login and get token
+- Fields available:
+  * username (required)
+  * email (required)
+  * password (hashed using Argon2)
+  * date_joined (automatic)
 
 ### Posts
 - `GET /api/posts/` - List all posts
@@ -71,6 +82,27 @@ python manage.py runserver_plus --cert-file cert.pem --key-file key.pem
 5. Input Validation
 6. Secure Cookie Handling
 
+## Models
+
+### User Model
+- Django's built-in User model provides:
+  * Username and password authentication
+  * Email field
+  * User permissions
+  * Groups for role-based access
+  * Admin interface integration
+
+### Post Model
+- Foreign Key to User model (author)
+- Post types: text, image, video
+- Metadata handling
+- Author-only permissions
+
+### Comment Model
+- Foreign Key to User model (author)
+- Foreign Key to Post model
+- Author-only permissions
+
 ## Design Patterns
 
 ### Singleton Pattern
@@ -80,5 +112,3 @@ python manage.py runserver_plus --cert-file cert.pem --key-file key.pem
 ### Factory Pattern
 - PostFactory: Creates different types of posts (text, image, video)
 - Handles validation and metadata requirements
-
-
