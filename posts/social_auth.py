@@ -18,7 +18,7 @@ def verify_google_token(token):
         idinfo = id_token.verify_oauth2_token(
             token,
             requests.Request(),
-            settings.GOOGLE_OAUTH2_KEY
+            settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
         )
         
         if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
@@ -78,8 +78,8 @@ class GoogleOAuth2LoginView(APIView):
             # Get or create token
             token, _ = Token.objects.get_or_create(user=user)
             
-            # Log the user in
-            login(request, user)
+            # Log the user in with the correct backend
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             
             return Response({
                 'token': token.key,

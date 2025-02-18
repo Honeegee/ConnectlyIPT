@@ -4,7 +4,7 @@ from .views import (
     UserListCreate, UserDetail,
     PostListCreate, PostDetail,
     CommentListCreate, CommentDetail,
-    LoginView
+    LoginView, PostLikeView, NewsFeedView
 )
 
 urlpatterns = [
@@ -23,4 +23,10 @@ urlpatterns = [
     # Comment URLs
     path('comments/', CommentListCreate.as_view(), name='comment-list-create'),
     path('comments/<int:pk>/', CommentDetail.as_view(), name='comment-detail'),
+    
+    # Like URLs
+    path('posts/<int:pk>/like/', PostLikeView.as_view(), name='post-like'),
+    
+    # Feed URL
+    path('feed/', NewsFeedView.as_view(), name='news-feed'),
 ]

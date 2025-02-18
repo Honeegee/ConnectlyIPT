@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import TokenAuthentication
 from django.contrib.auth.models import User, Group
@@ -8,8 +9,8 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import authenticate
 from django.core.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
-from .models import Post, Comment
-from .serializers import UserSerializer, PostSerializer, CommentSerializer
+from .models import Post, Comment, Like, UserFollow
+from .serializers import UserSerializer, PostSerializer, CommentSerializer, LikeSerializer
 from .permissions import IsPostAuthor, IsCommentAuthor, IsAdminUser, ReadOnly
 from singletons.logger_singleton import LoggerSingleton
 from singletons.config_manager import ConfigManager
@@ -291,6 +292,99 @@ def login_view(request):
         'google_oauth2_client_id': client_id
     })
 
+class PostLikeView(APIView):
+    """Handle likes for a specific post"""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        """Like a post"""
+        post = get_object_or_404(Post, pk=pk)
+        
+        # Check if user already liked the post
+        if Like.objects.filter(user=request.user, post=post).exists():
+            return Response(
+                {"error": "You have already liked this post"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        like = Like(user=request.user, post=post)
+        like.save()
+        
+        serializer = LikeSerializer(like)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    def delete(self, request, pk):
+        """Unlike a post"""
+        post = get_object_or_404(Post, pk=pk)
+        like = get_object_or_404(Like, user=request.user, post=post)
+        like.delete()
+        
+        return Response(
+            {"message": "Post unliked successfully"},
+            status=status.HTTP_200_OK
+        )
+
+class FeedPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class NewsFeedView(APIView):
+    """Get personalized news feed for authenticated user"""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = FeedPagination
+    
+    def get(self, request):
+        """
+        Get news feed with optional filters:
+        - followed: Show posts only from followed users (default: false)
+        - liked: Show posts liked by user (default: false)
+        - post_type: Filter by post type (text, image, video)
+        """
+        try:
+            # Get query parameters
+            show_followed = request.query_params.get('followed', 'false').lower() == 'true'
+            show_liked = request.query_params.get('liked', 'false').lower() == 'true'
+            post_type = request.query_params.get('post_type', None)
+            
+            # Start with all posts
+            posts = Post.objects.all()
+            
+            # Apply filters
+            if show_followed:
+                followed_users = UserFollow.objects.filter(follower=request.user).values_list('followed', flat=True)
+                posts = posts.filter(author__in=followed_users)
+                
+            if show_liked:
+                liked_posts = Like.objects.filter(user=request.user).values_list('post', flat=True)
+                posts = posts.filter(id__in=liked_posts)
+                
+            if post_type:
+                posts = posts.filter(post_type=post_type)
+            
+            # Sort by most recent
+            posts = posts.order_by('-created_at')
+            
+            # Apply pagination
+            paginator = self.pagination_class()
+            paginated_posts = paginator.paginate_queryset(posts, request)
+            
+            # Optimize by prefetching related data
+            paginated_posts = Post.objects.filter(id__in=[p.id for p in paginated_posts])\
+                .select_related('author')\
+                .prefetch_related('comments', 'likes')
+            
+            serializer = PostSerializer(paginated_posts, many=True)
+            return paginator.get_paginated_response(serializer.data)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class HomeView(APIView):
     """Homepage view showing API documentation"""
     permission_classes = [AllowAny]
@@ -319,6 +413,10 @@ class HomeView(APIView):
                 "retrieve": "/api/comments/{id}/ [GET]",
                 "update": "/api/comments/{id}/ [PUT]",
                 "delete": "/api/comments/{id}/ [DELETE]"
+            },
+            "likes": {
+                "like_post": "/api/posts/{id}/like/ [POST]",
+                "unlike_post": "/api/posts/{id}/like/ [DELETE]"
             }
         }
     })

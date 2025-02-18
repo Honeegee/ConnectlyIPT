@@ -46,6 +46,28 @@ class Post(models.Model):
     def __str__(self):
         return f"{self.post_type} post by {self.author.username} at {self.created_at}"
 
+class Like(models.Model):
+    user = models.ForeignKey(User, related_name='likes', on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, related_name='likes', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')  # Prevent multiple likes from same user
+
+    def __str__(self):
+        return f"Like by {self.user.username} on Post {self.post.id}"
+
+class UserFollow(models.Model):
+    follower = models.ForeignKey(User, related_name='following', on_delete=models.CASCADE)
+    followed = models.ForeignKey(User, related_name='followers', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'followed')
+
+    def __str__(self):
+        return f"{self.follower.username} follows {self.followed.username}"
+
 class Comment(models.Model):
     text = models.TextField()
     author = models.ForeignKey(User, related_name='comments', on_delete=models.CASCADE)
