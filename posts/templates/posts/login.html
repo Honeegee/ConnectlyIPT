@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Connectly - Login with Google</title>
+    <title>Connectly - Login</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -21,9 +21,43 @@
             max-width: 400px;
             width: 90%;
         }
+        .tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .tab {
+            flex: 1;
+            padding: 0.75rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        .tab.active {
+            color: #4285f4;
+            border-bottom: 2px solid #4285f4;
+        }
         h1 {
             color: #333;
             margin-bottom: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #495057;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
         }
         .login-button {
             display: inline-block;
@@ -34,20 +68,69 @@
             text-decoration: none;
             font-weight: bold;
             transition: background-color 0.3s;
+            width: 100%;
+            box-sizing: border-box;
+            border: none;
+            cursor: pointer;
+            margin: 0.5rem 0;
+        }
+        .google-button {
+            background-color: white;
+            color: #757575;
+            border: 1px solid #ddd;
         }
         .login-button:hover {
             background-color: #357abd;
+        }
+        .google-button:hover {
+            background-color: #f8f9fa;
         }
         .error-message {
             color: #dc3545;
             margin: 1rem 0;
             display: none;
         }
+        .divider {
+            margin: 1.5rem 0;
+            display: flex;
+            align-items: center;
+            text-align: center;
+        }
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .divider span {
+            padding: 0 1rem;
+            color: #6c757d;
+            background: white;
+        }
+        .messages {
+            margin-bottom: 1rem;
+        }
+        .messages div {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+        }
+        .messages .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .messages .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <h1>Welcome to Connectly</h1>
+        
         {% if messages %}
         <div class="messages">
             {% for message in messages %}
@@ -55,9 +138,88 @@
             {% endfor %}
         </div>
         {% endif %}
-        <a href="{% url 'social:begin' 'google-oauth2' %}" class="login-button">
+
+        <div class="tabs">
+            <button class="tab active" onclick="showForm('login')">Login</button>
+            <button class="tab" onclick="showForm('signup')">Sign Up</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="login-form" method="post" action="{% url 'login' %}">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="login">
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" required>
+            </div>
+            <button type="submit" class="login-button">Login</button>
+        </form>
+
+        <!-- Sign Up Form -->
+        <form id="signup-form" method="post" action="{% url 'login' %}" style="display: none;">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="signup">
+            <div class="form-group">
+                <label for="signup-username">Username</label>
+                <input type="text" id="signup-username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-email">Email</label>
+                <input type="email" id="signup-email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-password">Password</label>
+                <input type="password" id="signup-password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-confirm-password">Confirm Password</label>
+                <input type="password" id="signup-confirm-password" name="confirm_password" required>
+            </div>
+            <button type="submit" class="login-button">Sign Up</button>
+        </form>
+
+        <div class="divider">
+            <span>OR</span>
+        </div>
+
+        <a href="{% url 'social:begin' 'google-oauth2' %}" class="login-button google-button">
             Sign in with Google
         </a>
     </div>
+
+    <script>
+        function showForm(formType) {
+            const loginForm = document.getElementById('login-form');
+            const signupForm = document.getElementById('signup-form');
+            const tabs = document.querySelectorAll('.tab');
+
+            if (formType === 'login') {
+                loginForm.style.display = 'block';
+                signupForm.style.display = 'none';
+                tabs[0].classList.add('active');
+                tabs[1].classList.remove('active');
+            } else {
+                loginForm.style.display = 'none';
+                signupForm.style.display = 'block';
+                tabs[0].classList.remove('active');
+                tabs[1].classList.add('active');
+            }
+        }
+
+        // Form validation
+        document.getElementById('signup-form').addEventListener('submit', function(event) {
+            const password = document.getElementById('signup-password').value;
+            const confirmPassword = document.getElementById('signup-confirm-password').value;
+
+            if (password !== confirmPassword) {
+                event.preventDefault();
+                alert('Passwords do not match!');
+            }
+        });
+    </script>
 </body>
 </html>

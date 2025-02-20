@@ -66,6 +66,11 @@ SOCIAL_AUTH_PIPELINE = (
 )
 
 SOCIAL_AUTH_URL_NAMESPACE = 'social'
+# Login/Logout URLs
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_URL = 'logout'
+LOGOUT_REDIRECT_URL = 'login'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_ERROR_URL = '/login/'
 SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS = ['mmdc.mcl.edu.ph']
@@ -181,8 +186,27 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files
-STATIC_URL = 'static/'
+# Static and Media files
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'posts', 'static'),
+]
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# File Upload Settings
+FILE_UPLOAD_HANDLERS = [
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
+# 10GB in bytes (10 * 1024 * 1024 * 1024)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10737418240  
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10737418240
+# Use chunk size of 2.5MB for better memory management
+FILE_UPLOAD_CHUNK_SIZE = 2621440
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

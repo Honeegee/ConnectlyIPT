@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group
 
 class IsPostAuthor(BasePermission):
     """
-    Custom permission to only allow authors of a post to edit or delete it.
+    Custom permission to allow authors and admins to edit/delete posts.
     """
     def has_object_permission(self, request, view, obj):
         # Read permissions are allowed to any request,
@@ -11,8 +11,8 @@ class IsPostAuthor(BasePermission):
         if request.method in SAFE_METHODS:
             return True
 
-        # Write permissions are only allowed to the author of the post
-        return obj.author == request.user
+        # Write permissions are allowed to the author or admin users
+        return obj.author == request.user or request.user.groups.filter(name='Admin').exists()
 
 class IsCommentAuthor(BasePermission):
     """

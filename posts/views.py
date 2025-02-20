@@ -1,13 +1,21 @@
+
+import json
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.authentication import TokenAuthentication
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.contrib.auth.models import User, Group
-from django.shortcuts import get_object_or_404
-from django.contrib.auth import authenticate
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.contrib import messages
+from django.db import IntegrityError, transaction
 from rest_framework.authtoken.models import Token
 from .models import Post, Comment, Like, UserFollow
 from .serializers import UserSerializer, PostSerializer, CommentSerializer, LikeSerializer
@@ -17,7 +25,7 @@ from singletons.config_manager import ConfigManager
 from factories.post_factory import PostFactory
 
 class UserDetail(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
     def get(self, request, pk):
         """Retrieve a user"""
@@ -90,41 +98,38 @@ class UserListCreate(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class PostDetail(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated, IsPostAuthor]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     def get(self, request, pk):
         """Retrieve a post"""
         post = get_object_or_404(Post, pk=pk)
-        serializer = PostSerializer(post)
+        serializer = PostSerializer(post, context={'request': request})
         return Response(serializer.data)
 
     def put(self, request, pk):
         """Update a post"""
         post = get_object_or_404(Post, pk=pk)
         
-        # Check if user is the author
-        if post.author != request.user:
-            return Response(
-                {"error": "You do not have permission to edit this post"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Permission check is handled by IsPostAuthor permission class
             
-        serializer = PostSerializer(post, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            serializer = PostSerializer(post, data=request.data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                updated_post = serializer.save()
+                return Response(PostSerializer(updated_post, context={'request': request}).data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def delete(self, request, pk):
         """Delete a post"""
         post = get_object_or_404(Post, pk=pk)
         
-        # Check if user is the author
-        if post.author != request.user:
-            return Response(
-                {"error": "You do not have permission to delete this post"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Permission check is handled by IsPostAuthor permission class
             
         post_id = post.id
         post.delete()
@@ -134,8 +139,9 @@ class PostDetail(APIView):
         )
 
 class PostListCreate(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     
     def __init__(self):
         super().__init__()
@@ -147,7 +153,7 @@ class PostListCreate(APIView):
         try:
             page_size = self.config.get_setting('DEFAULT_PAGE_SIZE')
             posts = Post.objects.all()[:page_size]
-            serializer = PostSerializer(posts, many=True)
+            serializer = PostSerializer(posts, many=True, context={'request': request})
             response = Response(serializer.data)
             LoggerSingleton().log_api_request(request, response)
             return response
@@ -159,20 +165,43 @@ class PostListCreate(APIView):
             )
 
     def post(self, request):
-        """Create a new post using PostFactory"""
+        """Create a new post with optional media"""
         try:
-            post_data = request.data
-            post = PostFactory.create_post(
-                author=request.user,
-                post_type=post_data.get('post_type', 'text'),
-                title=post_data.get('title'),
-                content=post_data.get('content', ''),
-                metadata=post_data.get('metadata')
-            )
-            serializer = PostSerializer(post)
-            response = Response(serializer.data, status=status.HTTP_201_CREATED)
-            LoggerSingleton().log_api_request(request, response)
-            return response
+            with transaction.atomic():
+                # Prepare post data
+                post_data = request.data.copy()
+                post_data['author'] = request.user.id
+                
+                # Get media file if present
+                media_file = request.FILES.get('media')
+                post_type = post_data.get('post_type', 'text')
+
+                # Let the model handle metadata validation and processing
+                if media_file:
+                    # Keep metadata as is - model's clean() method will handle validation
+                    pass
+
+                # Create post using serializer
+                serializer = PostSerializer(data=post_data, context={'request': request})
+                if not serializer.is_valid():
+                    self.logger.error(f"Validation error: {serializer.errors}")
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+                # Save post without media first
+                post = serializer.save()
+
+                # Handle media file separately if present
+                if media_file:
+                    # Save the file directly without opening it
+                    post.media = media_file
+                    post.save()
+
+                # Return complete post data
+                response_serializer = PostSerializer(post, context={'request': request})
+                response = Response(response_serializer.data, status=status.HTTP_201_CREATED)
+                LoggerSingleton().log_api_request(request, response)
+                return response
+                
         except ValidationError as e:
             self.logger.error(f"Validation error creating post: {str(e)}")
             return Response(
@@ -187,7 +216,7 @@ class PostListCreate(APIView):
             )
 
 class CommentDetail(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated, IsCommentAuthor]
     def get(self, request, pk):
         """Retrieve a comment"""
@@ -231,27 +260,47 @@ class CommentDetail(APIView):
         )
 
 class CommentListCreate(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
     def get(self, request):
-        """List all comments"""
-        comments = Comment.objects.all()
+        """List comments, optionally filtered by post"""
+        post_id = request.query_params.get('post')
+        if post_id:
+            comments = Comment.objects.filter(post_id=post_id)
+        else:
+            comments = Comment.objects.all()
         serializer = CommentSerializer(comments, many=True)
         return Response(serializer.data)
 
     def post(self, request):
         """Create a new comment"""
-        serializer = CommentSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = request.data.copy()
+            data['author'] = request.user.id
+
+            serializer = CommentSerializer(data=data)
+            if serializer.is_valid():
+                comment = serializer.save()
+                return Response(
+                    CommentSerializer(comment).data,
+                    status=status.HTTP_201_CREATED
+                )
+            return Response(
+                {'error': 'Invalid comment data', 'details': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
         username = request.data.get('username')
+
         password = request.data.get('password')
         
         if username and password:
@@ -272,30 +321,82 @@ class LoginView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-# Keep the home view for API documentation
-from django.shortcuts import render
-from django.conf import settings
-
 def login_view(request):
-    """Render the Google OAuth login page"""
+    """Handle login and signup forms, and render the login page"""
+    if request.user.is_authenticated:
+        return redirect('home')
+
     logger = LoggerSingleton().get_logger()
-    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
     
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
+        
+        if form_type == 'login':
+            username = request.POST.get('username')
+            password = request.POST.get('password')
+            
+            user = authenticate(request, username=username, password=password)
+            if user is not None:
+                login(request, user)
+                logger.info(f"User {username} logged in successfully")
+                return redirect('home')
+            else:
+                messages.error(request, 'Invalid username or password.')
+                
+        elif form_type == 'signup':
+            username = request.POST.get('username')
+            email = request.POST.get('email')
+            password = request.POST.get('password')
+            
+            try:
+                # Create new user
+                user = User.objects.create_user(username=username, email=email, password=password)
+                # Log them in
+                login(request, user)
+                logger.info(f"New user {username} registered and logged in")
+                return redirect('home')
+            except IntegrityError:
+                messages.error(request, 'Username already exists.')
+            except Exception as e:
+                logger.error(f"Error creating user: {str(e)}")
+                messages.error(request, 'Error creating account. Please try again.')
+    
+    # Get Google OAuth client ID for the template
+    client_id = settings.SOCIAL_AUTH_GOOGLE_OAUTH2_KEY
     if not client_id:
         logger.error("Google OAuth client ID is not configured")
-        return render(request, 'posts/login.html', {
-            'error': 'OAuth configuration error'
-        })
+        messages.warning(request, 'Google Sign-in is currently unavailable.')
     
-    logger.info(f"Rendering login page with client ID: {client_id[:10]}...")
     return render(request, 'posts/login.html', {
         'google_oauth2_client_id': client_id
     })
 
+@login_required
+def home_view(request):
+    """Render the home page with news feed"""
+    # Check if user is in admin group
+    is_admin = request.user.groups.filter(name='Admin').exists()
+    return render(request, 'posts/home.html', {
+        'user': request.user,
+        'is_admin': is_admin
+    })
+
+def logout_view(request):
+    """Handle user logout"""
+    logout(request)
+    return redirect('login')
+
 class PostLikeView(APIView):
     """Handle likes for a specific post"""
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        """Get likes for a post"""
+        post = get_object_or_404(Post, pk=pk)
+        likes = Like.objects.filter(post=post)
+        serializer = LikeSerializer(likes, many=True)
+        return Response(serializer.data)
     
     def post(self, request, pk):
         """Like a post"""
@@ -330,63 +431,88 @@ class FeedPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-class NewsFeedView(APIView):
+from rest_framework.generics import ListAPIView
+
+class NewsFeedView(ListAPIView):
     """Get personalized news feed for authenticated user"""
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
+    serializer_class = PostSerializer
     pagination_class = FeedPagination
     
-    def get(self, request):
-        """
-        Get news feed with optional filters:
-        - followed: Show posts only from followed users (default: false)
-        - liked: Show posts liked by user (default: false)
-        - post_type: Filter by post type (text, image, video)
-        """
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def get_queryset(self):
+        """Get filtered queryset based on request parameters"""
+        # Get query parameters
+        show_followed = self.request.query_params.get('followed', 'false').lower() == 'true'
+        show_liked = self.request.query_params.get('liked', 'false').lower() == 'true'
+        post_type = self.request.query_params.get('post_type', None)
+        
+        # Start with all posts
+        queryset = Post.objects.all()
+        
+        # Apply filters
+        if show_followed:
+            followed_users = UserFollow.objects.filter(follower=self.request.user).values_list('followed', flat=True)
+            queryset = queryset.filter(author__in=followed_users)
+            
+        if show_liked:
+            liked_posts = Like.objects.filter(user=self.request.user).values_list('post', flat=True)
+            queryset = queryset.filter(id__in=liked_posts)
+            
+        if post_type:
+            queryset = queryset.filter(post_type=post_type)
+        
+        # Sort by most recent and optimize with prefetch
+        return queryset.order_by('-created_at')\
+            .select_related('author')\
+            .prefetch_related('comments', 'likes')
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def post_comments(request, post_id):
+    """Handle comments for a specific post"""
+    post = get_object_or_404(Post, pk=post_id)
+    
+    if request.method == 'GET':
+        comments = Comment.objects.filter(post=post).order_by('created_at')
+        serializer = CommentSerializer(comments, many=True)
+        return Response(serializer.data)
+        
+    elif request.method == 'POST':
         try:
-            # Get query parameters
-            show_followed = request.query_params.get('followed', 'false').lower() == 'true'
-            show_liked = request.query_params.get('liked', 'false').lower() == 'true'
-            post_type = request.query_params.get('post_type', None)
+            # Create the comment
+            serializer = CommentSerializer(data={
+                'content': request.data.get('content', ''),
+                'author': request.user.id,
+                'post': post.id
+            })
+            if serializer.is_valid():
+                comment = serializer.save()
+                return Response(
+                    CommentSerializer(comment).data, 
+                    status=status.HTTP_201_CREATED
+                )
             
-            # Start with all posts
-            posts = Post.objects.all()
-            
-            # Apply filters
-            if show_followed:
-                followed_users = UserFollow.objects.filter(follower=request.user).values_list('followed', flat=True)
-                posts = posts.filter(author__in=followed_users)
-                
-            if show_liked:
-                liked_posts = Like.objects.filter(user=request.user).values_list('post', flat=True)
-                posts = posts.filter(id__in=liked_posts)
-                
-            if post_type:
-                posts = posts.filter(post_type=post_type)
-            
-            # Sort by most recent
-            posts = posts.order_by('-created_at')
-            
-            # Apply pagination
-            paginator = self.pagination_class()
-            paginated_posts = paginator.paginate_queryset(posts, request)
-            
-            # Optimize by prefetching related data
-            paginated_posts = Post.objects.filter(id__in=[p.id for p in paginated_posts])\
-                .select_related('author')\
-                .prefetch_related('comments', 'likes')
-            
-            serializer = PostSerializer(paginated_posts, many=True)
-            return paginator.get_paginated_response(serializer.data)
-            
+            # Return detailed validation errors
+            return Response(
+                {'error': 'Invalid comment data', 'details': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error creating comment: {str(e)}")
             return Response(
                 {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-class HomeView(APIView):
-    """Homepage view showing API documentation"""
+class APIDocsView(APIView):
+    """API Documentation view"""
     permission_classes = [AllowAny]
     
     def get(self, request):

@@ -5,33 +5,35 @@ from singletons.logger_singleton import LoggerSingleton
 
 class PostFactory:
     @staticmethod
-    def create_post(author, post_type, title, content='', metadata=None):
+    def create_post(author, post_type, title, content='', metadata=None, media=None):
         """
         Factory method to create different types of posts with proper validation
         """
         logger = LoggerSingleton().get_logger()
         config = ConfigManager()
+
+        # Initialize metadata if None
+        metadata = metadata or {}
         
         try:
             # Validate post type
             if post_type not in dict(Post.POST_TYPES):
                 raise ValidationError(f"Invalid post type. Allowed types: {', '.join(dict(Post.POST_TYPES).keys())}")
 
-            # Initialize metadata if None
-            metadata = metadata or {}
-
-            # Validate and prepare metadata based on post type
-            if post_type == 'image':
-                if 'file_size' not in metadata:
-                    raise ValidationError("Image posts require 'file_size' in metadata")
-                if metadata['file_size'] > config.get_setting('MAX_FILE_SIZE'):
-                    raise ValidationError(f"File size exceeds maximum limit of {config.get_setting('MAX_FILE_SIZE')} bytes")
+            # Validate media requirements based on post type
+            if post_type in ['image', 'video']:
+                if not media:
+                    raise ValidationError(f"{post_type.capitalize()} post requires a media file")
                 
-            elif post_type == 'video':
-                if 'duration' not in metadata:
-                    raise ValidationError("Video posts require 'duration' in metadata")
-                if not isinstance(metadata['duration'], (int, float)) or metadata['duration'] <= 0:
-                    raise ValidationError("Video duration must be a positive number")
+                max_size = config.get_setting('MAX_FILE_SIZE', 10485760)  # Default 10MB
+                if hasattr(media, 'size') and media.size > max_size:
+                    raise ValidationError(f"File size exceeds maximum limit of {max_size/1024/1024:.1f}MB")
+
+                # Update metadata with file info
+                metadata.update({
+                    'file_size': media.size if hasattr(media, 'size') else 0,
+                    'file_type': media.name.split('.')[-1].lower() if hasattr(media, 'name') else ''
+                })
 
             # Create and validate the post
             post = Post(
@@ -45,6 +47,11 @@ class PostFactory:
             # This will run all model validations
             post.full_clean()
             post.save()
+
+            # Save media after post is created
+            if media:
+                post.media = media
+                post.save()
 
             logger.info(f"Created {post_type} post: {post.id} by {author.username}")
             return post
@@ -67,23 +74,23 @@ class PostFactory:
         )
 
     @staticmethod
-    def create_image_post(author, title, content, file_size):
+    def create_image_post(author, title, content, media):
         """Convenience method for creating image posts"""
         return PostFactory.create_post(
             author=author,
             post_type='image',
             title=title,
             content=content,
-            metadata={'file_size': file_size}
+            media=media
         )
 
     @staticmethod
-    def create_video_post(author, title, content, duration):
+    def create_video_post(author, title, content, media):
         """Convenience method for creating video posts"""
         return PostFactory.create_post(
             author=author,
             post_type='video',
             title=title,
             content=content,
-            metadata={'duration': duration}
+            media=media
         )

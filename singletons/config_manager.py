@@ -15,7 +15,7 @@ class ConfigManager:
             "MAX_POST_LENGTH": 5000,
             "MAX_COMMENT_LENGTH": 1000,
             "ALLOWED_POST_TYPES": ["text", "image", "video"],
-            "MAX_FILE_SIZE": 10 * 1024 * 1024  # 10MB
+            "MAX_FILE_SIZE": 10 * 1024 * 1024 * 1024  # 10GB (10240MB)
         }
 
     def get_setting(self, key):

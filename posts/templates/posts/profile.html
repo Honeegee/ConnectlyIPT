@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Connectly - Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    {% load static %}
+    <link href="{% static 'posts/css/profile.css' %}" rel="stylesheet">
+</head>
+<body>
+    {% csrf_token %}
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <img src="static/posts/images/ConnectlyLogo.png" alt="Connectly" class="logo">
+            Connectly
+        </a>
+        <div class="navbar-menu">
+            <a href="#" id="user-profile">{{ user.username }}</a>
+            <a href="{% url 'logout' %}">Logout</a>
+        </div>
+    </nav>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-menu">
+                <h3>News Feed</h3>
+                <div class="menu-item" data-filter="all">
+                    <span>All Posts</span>
+                </div>
+                <div class="menu-item" data-filter="following">
+                    <span>Following</span>
+                </div>
+                <div class="menu-item" data-filter="liked">
+                    <span>Liked Posts</span>
+                </div>
+                <h3>Filter by Type</h3>
+                <div class="menu-item" data-type="text">
+                    <span>Text Posts</span>
+                </div>
+                <div class="menu-item" data-type="image">
+                    <span>Image Posts</span>
+                </div>
+                <div class="menu-item" data-type="video">
+                    <span>Video Posts</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="profile-header">
+                <div class="profile-cover">
+                    <img src="{% static 'posts/images/default-cover.jpg' %}" alt="Cover Photo" class="cover-photo">
+                    {% if user.username == profile.username %}
+                        <button class="edit-cover">Edit Cover</button>
+                    {% endif %}
+                </div>
+                <div class="profile-info">
+                    <div class="profile-avatar">
+                        <img src="{% static 'posts/images/default-avatar.jpg' %}" alt="Profile Picture" class="avatar-large">
+                        {% if user.username == profile.username %}
+                            <button class="edit-avatar">Edit</button>
+                        {% endif %}
+                    </div>
+                    <div class="profile-details">
+                        <h1>{{ profile.full_name }}</h1>
+                        <p class="username">@{{ user.username }}</p>
+                        <p class="bio">{{ profile.bio }}</p>
+                        <div class="profile-stats">
+                            <div class="stat">
+                                <span class="stat-number">{{ profile.posts_count }}</span>
+                                <span class="stat-label">Posts</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-number">{{ profile.followers_count }}</span>
+                                <span class="stat-label">Followers</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-number">{{ profile.following_count }}</span>
+                                <span class="stat-label">Following</span>
+                            </div>
+                        </div>
+                        {% if user.username != profile.username %}
+                            <button class="follow-button" onclick="toggleFollow('{{ profile.username }}')">
+                                {% if is_following %}
+                                    Unfollow
+                                {% else %}
+                                    Follow
+                                {% endif %}
+                            </button>
+                        {% else %}
+                            <button class="edit-profile-button" onclick="showEditProfileModal()">Edit Profile</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-content">
+                <div class="content-tabs">
+                    <button class="tab-button active" data-tab="posts" onclick="switchTab('posts')">Posts</button>
+                    <button class="tab-button" data-tab="media" onclick="switchTab('media')">Media</button>
+                    <button class="tab-button" data-tab="liked" onclick="switchTab('liked')">Liked</button>
+                </div>
+
+                <div id="posts-container">
+                    <!-- Posts will be loaded here dynamically -->
+                </div>
+
+                <div class="pagination">
+                    <button id="prev-page" disabled>Previous</button>
+                    <button id="next-page">Next</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Post Modal -->
+    <div id="editPostModal" style="display: none;">
+        <div class="modal-content">
+            <button onclick="closeEditPostModal()" class="modal-close">&times;</button>
+            <h2 class="modal-title">Edit Post</h2>
+            <div class="modal-form">
+                <input type="hidden" id="editPostId">
+                <div class="form-group">
+                    <label for="editPostTitle">Title (Optional)</label>
+                    <input type="text" id="editPostTitle">
+                </div>
+                <div class="form-group">
+                    <label for="editPostContent">Content</label>
+                    <textarea id="editPostContent" required></textarea>
+                </div>
+                <input type="hidden" id="editPostType">
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeEditPostModal()" class="modal-button modal-button-cancel">Cancel</button>
+                <button onclick="editPost(document.getElementById('editPostId').value)" class="modal-button modal-button-submit">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" style="display: none;">
+        <div class="modal-content">
+            <button onclick="closeEditProfileModal()" class="modal-close">&times;</button>
+            <h2 class="modal-title">Edit Profile</h2>
+            <div class="modal-form">
+                <div class="form-group">
+                    <label for="fullName">Full Name</label>
+                    <input type="text" id="fullName" value="{{ profile.full_name }}">
+                </div>
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    <textarea id="bio">{{ profile.bio }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="location">Location</label>
+                    <input type="text" id="location" value="{{ profile.location }}">
+                </div>
+                <div class="form-group">
+                    <label for="website">Website</label>
+                    <input type="url" id="website" value="{{ profile.website }}">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeEditProfileModal()" class="modal-button modal-button-cancel">Cancel</button>
+                <button onclick="saveProfile()" class="modal-button modal-button-submit">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Profile Specific Styles */
+        .profile-header {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .profile-cover {
+            position: relative;
+            height: 200px;
+            border-radius: 12px 12px 0 0;
+            overflow: hidden;
+        }
+
+        .cover-photo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .edit-cover {
+            position: absolute;
+            right: 16px;
+            bottom: 16px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .profile-info {
+            padding: 24px;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .profile-avatar {
+            position: relative;
+            margin-top: -80px;
+        }
+
+        .avatar-large {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 4px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            object-fit: cover;
+        }
+
+        .edit-avatar {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .profile-details {
+            flex: 1;
+        }
+
+        .profile-details h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .username {
+            color: #666;
+            margin: 4px 0 12px;
+        }
+
+        .bio {
+            margin: 12px 0;
+            line-height: 1.5;
+        }
+
+        .profile-stats {
+            display: flex;
+            gap: 24px;
+            margin: 16px 0;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-number {
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .follow-button, .edit-profile-button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 8px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .follow-button:hover, .edit-profile-button:hover {
+            background: #1976d2;
+        }
+
+        .content-tabs {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 16px;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 8px 16px;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.2s;
+        }
+
+        .tab-button.active {
+            color: #2196f3;
+            font-weight: 500;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -17px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #2196f3;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        /* Ensure consistent styling with home page */
+        .layout {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 24px;
+        }
+
+        /* Inherit navbar styles from home page */
+        .navbar {
+            background: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            height: 40px;
+        }
+    </style>
+
+    <script src="{% static 'posts/js/home.js' %}"></script>
+    <script>
+        function showEditProfileModal() {
+            const modal = document.getElementById('editProfileModal');
+            modal.style.display = 'flex';
+        }
+
+        function closeEditProfileModal() {
+            const modal = document.getElementById('editProfileModal');
+            modal.style.display = 'none';
+        }
+
+        function saveProfile() {
+            // Get form values
+            const fullName = document.getElementById('fullName').value;
+            const bio = document.getElementById('bio').value;
+            const location = document.getElementById('location').value;
+            const website = document.getElementById('website').value;
+
+            // Send AJAX request to update profile
+            fetch('/api/profile/update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    fullName,
+                    bio,
+                    location,
+                    website
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                }
+            });
+        }
+
+        function switchTab(tab) {
+            // Update active tab
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+
+            // Load content for the selected tab
+            loadTabContent(tab);
+        }
+
+        function loadTabContent(tab) {
+            const username = '{{ profile.username }}';
+            fetch(`/api/profile/${username}/${tab}`)
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('posts-container');
+                    container.innerHTML = '';
+                    
+                    if (data.results && Array.isArray(data.results)) {
+                        if (data.results.length === 0) {
+                            container.innerHTML = '<div class="post"><div class="post-content">No posts found.</div></div>';
+                        } else {
+                            data.results.forEach(post => {
+                                container.appendChild(createPostElement(post));
+                            });
+                        }
+                    } else {
+                        container.innerHTML = '<div class="post"><div class="post-content">Error loading posts.</div></div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading posts:', error);
+                    const container = document.getElementById('posts-container');
+                    container.innerHTML = '<div class="post"><div class="post-content">Error loading posts. Please try again.</div></div>';
+                });
+        }
+
+        function toggleFollow(username) {
+            const button = document.querySelector('.follow-button');
+            const isFollowing = button.textContent.trim() === 'Unfollow';
+
+            fetch(`/api/profile/${username}/${isFollowing ? 'unfollow' : 'follow'}`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    button.textContent = isFollowing ? 'Follow' : 'Unfollow';
+                    // Update followers count
+                    const followersCount = document.querySelector('.followers-count');
+                    followersCount.textContent = data.newCount;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
