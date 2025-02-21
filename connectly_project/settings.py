@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'corsheaders',
     'social_django',
+    'storages',
     'posts',
 ]
 
