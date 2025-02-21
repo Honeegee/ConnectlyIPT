@@ -12,10 +12,15 @@ from posts.views import APIDocsView, login_view, home_view, logout_view
 from posts.social_auth import GoogleOAuth2LoginView, OAuthCompleteView
 
 urlpatterns = [
-    path('', home_view, name='home'),  # Root URL showing news feed
-    path('api/docs/', APIDocsView.as_view(), name='api_docs'),  # API documentation
-    path('admin/', admin.site.urls),
+    # API endpoints first for proper routing
     path('api/', include('posts.urls')),  # API endpoints
+    path('api/docs/', APIDocsView.as_view(), name='api_docs'),  # API documentation
+    
+    # Admin URL
+    path('admin/', admin.site.urls),
+    
+    # Frontend URLs
+    path('', home_view, name='home'),  # Root URL showing news feed
     path('login/', login_view, name='login'),  # Login page with Google OAuth
     path('logout/', logout_view, name='logout'),  # Logout
     

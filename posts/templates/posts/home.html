@@ -5,20 +5,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     {% load static %}
     <link href="{% static 'posts/css/home.css' %}" rel="stylesheet">
-    <link href="{% static 'posts/css/profile.css' %}" rel="stylesheet">
 </head>
 <body data-is-admin="{{ is_admin|lower }}" data-username="{{ user.username }}">
     {% csrf_token %}
     <nav class="navbar">
-      <a href="/" class="navbar-brand">
-        <img src="{% static 'posts/images/ConnectlyLogo.png' %}" alt="Connectly" class="logo">
-        Connectly
-    </a>
-    
-    
-    
+        <a href="/" class="navbar-brand">
+            <img src="{% static 'posts/images/ConnectlyLogo.png' %}" alt="Connectly" class="logo">
+            Connectly
+        </a>
         <div class="navbar-menu">
-            <a href="#" id="user-profile">{{ user.username }}</a>
+            <a href="{% url 'profile' %}" id="user-profile">{{ user.username }}</a>
             <a href="{% url 'logout' %}">Logout</a>
         </div>
     </nav>
@@ -33,9 +29,10 @@
                 <div class="menu-item" data-filter="following">
                     <span>Following</span>
                 </div>
-                <div class="menu-item" data-filter="liked">
+                <div class="menu-item mb-5" data-filter="liked">
                     <span>Liked Posts</span>
                 </div>
+                
                 <h3>Filter by Type</h3>
                 <div class="menu-item" data-type="text">
                     <span>Text Posts</span>
@@ -50,56 +47,6 @@
         </aside>
 
         <main class="main-content" id="main-content">
-            <!-- Profile Section -->
-            <div id="profile-section" style="display: none;">
-                <div class="profile-nav">
-                    <button onclick="showFeed()" class="back-to-feed">&larr; Back to Feed</button>
-                </div>
-                <div class="profile-header">
-                    <div class="profile-cover">
-                        <img src="{% static 'posts/images/default-cover.jpg' %}" alt="Cover Photo" class="cover-photo">
-                        <button class="edit-cover" style="display: none;">Edit Cover</button>
-                    </div>
-                    <div class="profile-info">
-                        <div class="profile-avatar">
-                            <img src="{% static 'posts/images/default-avatar.jpg' %}" alt="Profile Picture" class="avatar-large">
-                            <button class="edit-avatar" style="display: none;">Edit</button>
-                        </div>
-                        <div class="profile-details">
-                            <h1 id="profile-full-name"></h1>
-                            <p class="username" id="profile-username"></p>
-                            <p class="bio" id="profile-bio"></p>
-                            <div class="profile-stats">
-                                <div class="stat">
-                                    <span class="stat-number" id="posts-count">0</span>
-                                    <span class="stat-label">Posts</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-number" id="followers-count">0</span>
-                                    <span class="stat-label">Followers</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-number" id="following-count">0</span>
-                                    <span class="stat-label">Following</span>
-                                </div>
-                            </div>
-                            <button class="follow-button" id="follow-button" style="display: none;">Follow</button>
-                            <button class="edit-profile-button" id="edit-profile-button" style="display: none;">Edit Profile</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="profile-content">
-                    <div class="content-tabs">
-                        <button class="tab-button active" data-tab="posts" onclick="switchTab('posts')">Posts</button>
-                        <button class="tab-button" data-tab="media" onclick="switchTab('media')">Media</button>
-                        <button class="tab-button" data-tab="liked" onclick="switchTab('liked')">Liked</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Feed Section -->
-            <div id="feed-section">
             <div class="create-post">
                 <div class="create-post-input">
                     <div class="avatar"></div>
@@ -107,9 +54,9 @@
                 </div>
             </div>
 
-            <div id="posts-container">
-                <!-- Posts will be loaded here dynamically -->
-            </div>
+            <ul id="posts-container">
+                <li class="loading">Loading posts...</li>
+            </ul>
 
             <div class="pagination">
                 <button id="prev-page" disabled>Previous</button>
@@ -118,85 +65,53 @@
         </main>
     </div>
 
-      <div id="createPostModal" style="display: none;" role="dialog" aria-labelledby="createPostTitle" aria-hidden="true">
-          <div class="modal-content">
-              <button onclick="closeCreatePostModal()" class="modal-close">&times;</button>
-              <h2 class="modal-title" id="createPostTitle">Create Post</h2>
-              <div class="modal-form">
-                  <select id="postType" onchange="toggleMediaInput()">
-                      <option value="text">Text Post</option>
-                      <option value="image">Image Post</option>
-                      <option value="video">Video Post</option>
-                  </select>
-                  <input type="text" id="postTitle" placeholder="Post Title (optional)">
-                  <textarea id="postContent" placeholder="Write something..."></textarea>
-                  
-                  <div id="mediaInputs" style="display: none;">
-                      <input type="file" id="imageInput" accept="image/*" style="display: none;">
-                      <input type="file" id="videoInput" accept="video/*" style="display: none;">
-                  </div>
-      
-                  <div id="mediaPreview" style="display: none;">
-                      <img id="imagePreview" style="display: none;">
-                      <video id="videoPreview" style="display: none;" controls></video>
-                  </div>
-              </div>
-              <div class="modal-actions">
-                  <button onclick="closeCreatePostModal()" class="modal-button modal-button-cancel">Cancel</button>
-                  <button onclick="createPost()" class="modal-button modal-button-submit">Post</button>
-              </div>
-          </div>
-      </div>
-
-      <!-- Edit Post Modal -->
-      <div id="editPostModal" style="display: none;" role="dialog" aria-labelledby="editPostTitle" aria-hidden="true">
-          <div class="modal-content">
-              <button onclick="closeEditPostModal()" class="modal-close">&times;</button>
-              <h2 class="modal-title" id="editPostTitle">Edit Post</h2>
-              <div class="modal-form">
-                  <input type="hidden" id="editPostId">
-                  <input type="hidden" id="editPostType">
-                  <input type="text" id="editPostTitle" placeholder="Post Title (optional)">
-                  <textarea id="editPostContent" placeholder="Write something..."></textarea>
-              </div>
-              <div class="modal-actions">
-                  <button onclick="closeEditPostModal()" class="modal-button modal-button-cancel">Cancel</button>
-                  <button onclick="editPost(document.getElementById('editPostId').value)" class="modal-button modal-button-submit">Save Changes</button>
-              </div>
-          </div>
-      </div>
-
-    <!-- Edit Profile Modal -->
-    <div id="editProfileModal" style="display: none;">
+    <div id="createPostModal" style="display: none;" role="dialog" aria-labelledby="createPostTitle" aria-hidden="true">
         <div class="modal-content">
-            <button onclick="closeEditProfileModal()" class="modal-close">&times;</button>
-            <h2 class="modal-title">Edit Profile</h2>
+            <button onclick="closeCreatePostModal()" class="modal-close">&times;</button>
+            <h2 class="modal-title" id="createPostTitle">Create Post</h2>
             <div class="modal-form">
-                <div class="form-group">
-                    <label for="fullName">Full Name</label>
-                    <input type="text" id="fullName">
+                <select id="postType" onchange="toggleMediaInput()">
+                    <option value="text">Text Post</option>
+                    <option value="image">Image Post</option>
+                    <option value="video">Video Post</option>
+                </select>
+                <input type="text" id="postTitle" placeholder="Post Title (optional)">
+                <textarea id="postContent" placeholder="Write something..."></textarea>
+                
+                <div id="mediaInputs" style="display: none;">
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                    <input type="file" id="videoInput" accept="video/*" style="display: none;">
                 </div>
-                <div class="form-group">
-                    <label for="bio">Bio</label>
-                    <textarea id="bio"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="location">Location</label>
-                    <input type="text" id="location">
-                </div>
-                <div class="form-group">
-                    <label for="website">Website</label>
-                    <input type="url" id="website">
+    
+                <div id="mediaPreview" style="display: none;">
+                    <img id="imagePreview" style="display: none;">
+                    <video id="videoPreview" style="display: none;" controls></video>
                 </div>
             </div>
             <div class="modal-actions">
-                <button onclick="closeEditProfileModal()" class="modal-button modal-button-cancel">Cancel</button>
-                <button onclick="saveProfile()" class="modal-button modal-button-submit">Save Changes</button>
+                <button onclick="closeCreatePostModal()" class="modal-button modal-button-cancel">Cancel</button>
+                <button onclick="createPost()" class="modal-button modal-button-submit">Post</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editPostModal" style="display: none;" role="dialog" aria-labelledby="editPostTitle" aria-hidden="true">
+        <div class="modal-content">
+            <button onclick="closeEditPostModal()" class="modal-close">&times;</button>
+            <h2 class="modal-title" id="editPostTitle">Edit Post</h2>
+            <div class="modal-form">
+                <input type="hidden" id="editPostId">
+                <input type="hidden" id="editPostType">
+                <input type="text" id="editPostTitle" placeholder="Post Title (optional)">
+                <textarea id="editPostContent" placeholder="Write something..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeEditPostModal()" class="modal-button modal-button-cancel">Cancel</button>
+                <button onclick="editPost(document.getElementById('editPostId').value)" class="modal-button modal-button-submit">Save Changes</button>
             </div>
         </div>
     </div>
 
     <script src="{% static 'posts/js/home.js' %}"></script>
-    <script src="{% static 'posts/js/profile.js' %}"></script>
 </body>
 </html>

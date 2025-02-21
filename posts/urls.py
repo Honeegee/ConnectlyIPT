@@ -1,5 +1,5 @@
 
-from django.urls import path
+from django.urls import path, include
 from rest_framework.authtoken.views import obtain_auth_token
 from .views import (
     UserListCreate, UserDetail,
@@ -7,7 +7,8 @@ from .views import (
     CommentListCreate, CommentDetail,
     LoginView, PostLikeView, NewsFeedView,
     login_view, home_view, logout_view,
-    APIDocsView, post_comments
+    APIDocsView, post_comments, profile_view,
+    UserProfileView, UserProfilePostsView, UserFollowView
 )
 
 # Frontend URLs
@@ -15,6 +16,8 @@ frontend_urlpatterns = [
     path('', home_view, name='home'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
+    path('profile/', profile_view, name='profile'),
+    path('profile/<str:username>/', profile_view, name='user-profile'),
 ]
 
 # API URLs
@@ -46,7 +49,14 @@ api_urlpatterns = [
     
     # Post Comments URL
     path('posts/<int:post_id>/comments/', post_comments, name='post-comments'),
+    
+# Profile URLs 
+    path('profiles/me/', UserProfileView.as_view(), name='my-profile'),
+    path('profiles/<str:username>/', UserProfileView.as_view(), name='user-profile'),
+    path('profiles/<str:username>/posts/', UserProfilePostsView.as_view(), name='profile-posts'),
+    path('profiles/<str:username>/follow/', UserFollowView.as_view(), name='user-follow'),
+    path('profiles/<str:username>/unfollow/', UserFollowView.as_view(), name='user-unfollow'),
 ]
 
-# Combine frontend and API URLs, with frontend URLs first
-urlpatterns = frontend_urlpatterns + api_urlpatterns
+# Combine API and frontend URLs
+urlpatterns = api_urlpatterns + frontend_urlpatterns

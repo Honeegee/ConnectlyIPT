@@ -1,7 +1,53 @@
 import json
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Post, Comment, Like
+from .models import Post, Comment, Like, UserProfile
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    full_name = serializers.SerializerMethodField()
+    posts_count = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
+    cover_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserProfile
+        fields = ['username', 'full_name', 'bio', 'location', 'website', 
+                 'avatar_url', 'cover_url', 'posts_count', 'followers_count', 
+                 'following_count', 'is_following']
+
+    def get_full_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+    def get_posts_count(self, obj):
+        return obj.user.posts.count()
+
+    def get_followers_count(self, obj):
+        return obj.user.followers.count()
+
+    def get_following_count(self, obj):
+        return obj.user.following.count()
+
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.user.followers.filter(follower=request.user).exists()
+
+    def get_avatar_url(self, obj):
+        request = self.context.get('request')
+        if obj.avatar and request:
+            return request.build_absolute_uri(obj.avatar.url)
+        return None
+
+    def get_cover_url(self, obj):
+        request = self.context.get('request')
+        if obj.cover_photo and request:
+            return request.build_absolute_uri(obj.cover_photo.url)
+        return None
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,6 +76,13 @@ class PostSerializer(serializers.ModelSerializer):
     comment_count = serializers.SerializerMethodField()
     media_url = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated or obj.author == request.user:
+            return False
+        return obj.author.followers.filter(follower=request.user).exists()
 
     def get_can_edit(self, obj):
         request = self.context.get('request')
@@ -43,7 +96,7 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = ['id', 'title', 'content', 'author', 'author_username', 'created_at', 'comments', 
                  'like_count', 'comment_count', 'post_type', 'metadata', 'media', 'media_url',
-                 'can_edit']
+                 'can_edit', 'is_following']
         read_only_fields = ['created_at', 'media_url']
         
     def get_media_url(self, obj):
@@ -90,13 +143,17 @@ class PostSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     author_username = serializers.CharField(source='author.username', read_only=True)
-    content = serializers.CharField(source='text', required=True)
+    text = serializers.CharField(required=True, allow_blank=False, error_messages={
+        'required': 'Comment text is required.',
+        'blank': 'Comment cannot be empty.'
+    })
     
     class Meta:
         model = Comment
-        fields = ['id', 'content', 'author', 'author_username', 'post', 'created_at']
+        fields = ['id', 'text', 'author', 'author_username', 'post', 'created_at']
         read_only_fields = ['created_at']
 
-    def create(self, validated_data):
-        validated_data['text'] = validated_data.pop('content')
-        return Comment.objects.create(**validated_data)
+    def validate(self, data):
+        if not data.get('text', '').strip():
+            raise serializers.ValidationError({'text': 'Comment cannot be empty.'})
+        return data

@@ -4,7 +4,8 @@ const state = {
     currentFilter: 'all',
     currentPostType: '',
     csrfToken: null,
-    isLoading: false
+    isLoading: false,
+    debounceTimers: {} // For debouncing actions
 };
 
 // Initialize app when DOM is loaded
@@ -17,18 +18,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         state.csrfToken = csrfElement.value;
 
-        // Initialize modals
-        initializeModals();
-        
-        // Initialize app
-        loadPosts();
-        setupFilterListeners();
-        setupMediaListeners();
+        // Only initialize posts functionality if we're on the home page
+        const postsContainer = document.getElementById('posts-container');
+        if (postsContainer) {
+            // Initialize modals
+            initializeModals();
+            
+            // Initialize app
+            loadPosts();
+            setupFilterListeners();
+            setupMediaListeners();
+        }
     } catch (error) {
         console.error('Error initializing app:', error);
         alert('Error initializing application. Please refresh the page.');
     }
 });
+
+// Debounce helper function
+function debounce(fn, delay, id) {
+    return (...args) => {
+        if (state.debounceTimers[id]) {
+            clearTimeout(state.debounceTimers[id]);
+        }
+        state.debounceTimers[id] = setTimeout(() => {
+            fn.apply(null, args);
+            delete state.debounceTimers[id];
+        }, delay);
+    };
+}
 
 // Reusable API response handler
 function handleAPIResponse(response) {
@@ -54,34 +72,58 @@ function initializeModals() {
 }
 
 function showCreatePostModal() {
-    document.getElementById('createPostModal').style.display = 'flex';
-    document.getElementById('postContent').focus();
+    const modal = document.getElementById('createPostModal');
+    const content = document.getElementById('postContent');
+    if (!modal || !content) return;
+
+    modal.style.display = 'flex';
+    content.focus();
 }
 
 function closeCreatePostModal() {
-    document.getElementById('createPostModal').style.display = 'none';
-    document.getElementById('postTitle').value = '';
-    document.getElementById('postContent').value = '';
-    document.getElementById('postType').value = 'text';
+    const modal = document.getElementById('createPostModal');
+    const title = document.getElementById('postTitle');
+    const content = document.getElementById('postContent');
+    const type = document.getElementById('postType');
+    const mediaInputs = document.getElementById('mediaInputs');
+    const mediaPreview = document.getElementById('mediaPreview');
+    const imageInput = document.getElementById('imageInput');
+    const videoInput = document.getElementById('videoInput');
+
+    if (!modal) return;
     
-    // Reset media inputs
-    document.getElementById('mediaInputs').style.display = 'none';
-    document.getElementById('mediaPreview').style.display = 'none';
-    document.getElementById('imageInput').value = '';
-    document.getElementById('videoInput').value = '';
+    modal.style.display = 'none';
+    if (title) title.value = '';
+    if (content) content.value = '';
+    if (type) type.value = 'text';
+    
+    // Reset media inputs if they exist
+    if (mediaInputs) mediaInputs.style.display = 'none';
+    if (mediaPreview) mediaPreview.style.display = 'none';
+    if (imageInput) imageInput.value = '';
+    if (videoInput) videoInput.value = '';
 }
 
 function showEditPostModal(postId, content, title, postType) {
     const modal = document.getElementById('editPostModal');
+    const editId = document.getElementById('editPostId');
+    const editTitle = document.getElementById('editPostTitle');
+    const editContent = document.getElementById('editPostContent');
+    const editType = document.getElementById('editPostType');
+
+    if (!modal || !editId || !editTitle || !editContent || !editType) return;
+
     modal.style.display = 'flex';
-    document.getElementById('editPostId').value = postId;
-    document.getElementById('editPostTitle').value = title;
-    document.getElementById('editPostContent').value = content;
-    document.getElementById('editPostType').value = postType;
+    editId.value = postId;
+    editTitle.value = title;
+    editContent.value = content;
+    editType.value = postType;
 }
 
 function closeEditPostModal() {
-    document.getElementById('editPostModal').style.display = 'none';
+    const modal = document.getElementById('editPostModal');
+    if (!modal) return;
+    modal.style.display = 'none';
 }
 
 function deletePost(postId) {
@@ -91,7 +133,7 @@ function deletePost(postId) {
 
     fetch(`/api/posts/${postId}/`, {
         method: 'DELETE',
-        credentials: 'include',
+            credentials: 'same-origin',
         headers: {
             'X-CSRFToken': state.csrfToken
         }
@@ -131,7 +173,7 @@ function editPost(postId) {
 
         fetch(`/api/posts/${postId}/`, {
             method: 'PUT',
-            credentials: 'include',
+        credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': state.csrfToken
@@ -165,6 +207,9 @@ function setupMediaListeners() {
     const imageInput = document.getElementById('imageInput');
     const videoInput = document.getElementById('videoInput');
     
+    // Only set up listeners if we're on the home page
+    if (!imageInput || !videoInput) return;
+    
     imageInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -180,6 +225,11 @@ function setupMediaListeners() {
                 imagePreview.src = e.target.result;
                 imagePreview.style.display = 'block';
                 mediaPreview.style.display = 'block';
+            };
+            reader.onerror = () => {
+                console.error('Error reading file');
+                alert('Error previewing file. Please try again.');
+                e.target.value = '';
             };
             reader.readAsDataURL(file);
         }
@@ -201,47 +251,23 @@ function setupMediaListeners() {
                 videoPreview.style.display = 'block';
                 mediaPreview.style.display = 'block';
             };
+            reader.onerror = () => {
+                console.error('Error reading file');
+                alert('Error previewing file. Please try again.');
+                e.target.value = '';
+            };
             reader.readAsDataURL(file);
         }
     });
 }
 
-function toggleMediaInput() {
-    const postType = document.getElementById('postType').value;
-    const mediaInputs = document.getElementById('mediaInputs');
-    const imageInput = document.getElementById('imageInput');
-    const videoInput = document.getElementById('videoInput');
-    const imagePreview = document.getElementById('imagePreview');
-    const videoPreview = document.getElementById('videoPreview');
-    const mediaPreview = document.getElementById('mediaPreview');
-
-    // Reset all media elements
-    imageInput.style.display = 'none';
-    videoInput.style.display = 'none';
-    imagePreview.style.display = 'none';
-    videoPreview.style.display = 'none';
-    mediaPreview.style.display = 'none';
-    
-    if (postType === 'image') {
-        mediaInputs.style.display = 'block';
-        imageInput.style.display = 'block';
-        imageInput.click();
-    } else if (postType === 'video') {
-        mediaInputs.style.display = 'block';
-        videoInput.style.display = 'block';
-        videoInput.click();
-    } else {
-        mediaInputs.style.display = 'none';
-    }
-}
-
 function validateMediaFile(file, type) {
-    const maxSize = 10000 * 1024 * 1024; // 10000MB (10GB)
+    const maxSize = 50 * 1024 * 1024; // 50MB
     const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
 
     if (file.size > maxSize) {
-        alert('File size must be less than 10GB');
+        alert('File size must be less than 50MB');
         return false;
     }
 
@@ -311,7 +337,7 @@ function createPost() {
 
             fetch('/api/posts/', {
                 method: 'POST',
-                credentials: 'include',
+                credentials: 'same-origin',
                 headers: {
                     'X-CSRFToken': state.csrfToken
                 },
@@ -326,7 +352,7 @@ function createPost() {
         } else {
             fetch('/api/posts/', {
                 method: 'POST',
-                credentials: 'include',
+            credentials: 'same-origin',
                 headers: {
                     'X-CSRFToken': state.csrfToken,
                     'Content-Type': 'application/json'
@@ -356,9 +382,11 @@ function createPost() {
 
 function handleSuccess(post) {
     const container = document.getElementById('posts-container');
-    const newPostElement = createPostElement(post);
-    container.insertBefore(newPostElement, container.firstChild);
-    closeCreatePostModal();
+    if (container) {
+        const newPostElement = createPostElement(post);
+        container.insertBefore(newPostElement, container.firstChild);
+        closeCreatePostModal();
+    }
 }
 
 function handleError(error) {
@@ -366,7 +394,49 @@ function handleError(error) {
     alert(error.message || 'An error occurred. Please try again.');
 }
 
+function toggleMediaInput() {
+    const mediaInputs = document.getElementById('mediaInputs');
+    const imageInput = document.getElementById('imageInput');
+    const videoInput = document.getElementById('videoInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const videoPreview = document.getElementById('videoPreview');
+    const mediaPreview = document.getElementById('mediaPreview');
+    const postType = document.getElementById('postType');
+
+    // Return if any required element is missing
+    if (!mediaInputs || !imageInput || !videoInput || !imagePreview || 
+        !videoPreview || !mediaPreview || !postType) {
+        return;
+    }
+
+    // Reset all media elements
+    imageInput.style.display = 'none';
+    videoInput.style.display = 'none';
+    imagePreview.style.display = 'none';
+    videoPreview.style.display = 'none';
+    mediaPreview.style.display = 'none';
+    
+    if (postType.value === 'image') {
+        mediaInputs.style.display = 'block';
+        imageInput.style.display = 'block';
+        imageInput.click();
+    } else if (postType.value === 'video') {
+        mediaInputs.style.display = 'block';
+        videoInput.style.display = 'block';
+        videoInput.click();
+    } else {
+        mediaInputs.style.display = 'none';
+    }
+}
+
 function setupFilterListeners() {
+    // Only set up listeners if we're on the home page
+    const container = document.getElementById('posts-container');
+    if (!container) return;
+
+    const prevPage = document.getElementById('prev-page');
+    const nextPage = document.getElementById('next-page');
+
     document.querySelectorAll('.menu-item[data-filter]').forEach(item => {
         item.addEventListener('click', () => {
             document.querySelectorAll('.menu-item[data-filter]').forEach(i => i.classList.remove('active'));
@@ -387,92 +457,44 @@ function setupFilterListeners() {
         });
     });
 
-    document.getElementById('prev-page').addEventListener('click', () => {
-        if (state.currentPage > 1) {
-            state.currentPage--;
-            loadPosts();
-        }
-    });
-
-    document.getElementById('next-page').addEventListener('click', () => {
-        state.currentPage++;
-        loadPosts();
-    });
-}
-
-function loadPosts() {
-    if (state.isLoading) return;
-    state.isLoading = true;
-
-    const container = document.getElementById('posts-container');
-    container.innerHTML = '<div class="loading">Loading posts...</div>';
-
-    let url = `/api/feed/?page=${state.currentPage}`;
-    
-    if (state.currentFilter === 'following') {
-        url += '&followed=true';
-    } else if (state.currentFilter === 'liked') {
-        url += '&liked=true';
-    }
-    
-    if (state.currentPostType) {
-        url += `&post_type=${state.currentPostType}`;
-    }
-
-    fetch(url, {
-        credentials: 'include',
-        headers: {
-            'Accept': 'application/json',
-            'X-CSRFToken': state.csrfToken
-        }
-    })
-    .then(handleAPIResponse)
-    .then(data => {
-        container.innerHTML = '';
-
-        if (data.results && Array.isArray(data.results)) {
-            if (data.results.length === 0) {
-                container.innerHTML = '<div class="post"><div class="post-content">No posts found.</div></div>';
-            } else {
-                data.results.forEach(post => {
-                    container.appendChild(createPostElement(post));
-                });
+    if (prevPage) {
+        prevPage.addEventListener('click', () => {
+            if (state.currentPage > 1) {
+                state.currentPage--;
+                loadPosts();
             }
+        });
+    }
 
-            document.getElementById('prev-page').disabled = !data.previous;
-            document.getElementById('next-page').disabled = !data.next;
-        } else {
-            throw new Error('Invalid response format');
-        }
-    })
-    .catch(error => {
-        console.error('Error loading posts:', error);
-        container.innerHTML = '<div class="post"><div class="post-content">Error loading posts. Please try again.</div></div>';
-        
-        if (error.status === 401) {
-            window.location.href = '/login/';
-        }
-    })
-    .finally(() => {
-        state.isLoading = false;
-    });
+    if (nextPage) {
+        nextPage.addEventListener('click', () => {
+            state.currentPage++;
+            loadPosts();
+        });
+    }
 }
 
-// Make createPostElement available globally for profile.js
-window.createPostElement = function(post) {
-    const postDiv = document.createElement('div');
-    postDiv.className = `post${post.author_username === document.body.dataset.username ? ' user-post' : ''}`;
-    postDiv.setAttribute('data-post-id', post.id);
+// Create DOM elements for posts
+function createPostElement(post) {
+    const postItem = document.createElement('li');
+    postItem.className = `post${post.author_username === document.body.dataset.username ? ' user-post' : ''}`;
+    postItem.setAttribute('data-post-id', post.id);
     
     const date = new Date(post.created_at).toLocaleDateString();
+    const isOwnPost = post.author_username === document.body.dataset.username;
     
-    postDiv.innerHTML = `
+    postItem.innerHTML = `
         <div class="post-header">
             <div class="avatar"></div>
             <div class="post-info">
-                <a href="#" class="post-author">${post.author_username}</a>
+                <a href="/profile/${post.author_username}/" class="post-author">${post.author_username}</a>
                 <div class="post-time">${date}</div>
             </div>
+            ${!isOwnPost ? `
+                <button class="follow-button${post.is_following ? ' following' : ''}" onclick="toggleFollow('${post.author_username}', this)">
+                    ${post.is_following ? 'Following' : 'Follow'}
+                </button>
+            ` : ''}
         </div>
         <div class="post-content">
             ${post.content ? post.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : ''}
@@ -519,61 +541,149 @@ window.createPostElement = function(post) {
         </div>
     `;
     
-    return postDiv;
-}
-
-function handleCommentInput(event, postId, inputElement) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitComment(postId, inputElement);
-    }
-}
-
-function toggleLikes(postId) {
-    const likesSection = document.getElementById(`likes-${postId}`);
-    if (likesSection.style.display === 'none') {
-        likesSection.style.display = 'block';
-        loadLikes(postId);
-    } else {
-        likesSection.style.display = 'none';
-    }
-}
-
-function loadLikes(postId) {
-    const likesList = document.getElementById(`likes-list-${postId}`);
-    likesList.innerHTML = '<div class="loading">Loading likes...</div>';
-
-    fetch(`/api/posts/${postId}/like/`, {
-        credentials: 'include',
-        headers: {
-            'Accept': 'application/json',
+    fetch(`/api/posts/${post.id}/like/`, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
             'X-CSRFToken': state.csrfToken
         }
     })
     .then(handleAPIResponse)
     .then(likes => {
-        likesList.innerHTML = '';
-        if (likes.length === 0) {
-            likesList.innerHTML = '<div class="like-item">No likes yet</div>';
-            return;
+        const likesList = document.getElementById(`likes-list-${post.id}`);
+        if (likesList) {
+            likesList.innerHTML = '';
+            if (likes.length === 0) {
+                likesList.innerHTML = '<div class="like-item">No likes yet</div>';
+                return;
+            }
+            likes.forEach(like => {
+                const likeElement = document.createElement('div');
+                likeElement.className = 'like-item';
+                likeElement.innerHTML = `
+                    <div class="like-user">
+                        <div class="avatar"></div>
+                        <a href="/profile/${like.user_username}/" class="like-username">${like.user_username}</a>
+                    </div>
+                `;
+                likesList.appendChild(likeElement);
+            });
         }
-        likes.forEach(like => {
-            const likeElement = document.createElement('div');
-            likeElement.className = 'like-item';
-            likeElement.innerHTML = `
-                <div class="like-user">
-                    <div class="avatar"></div>
-                    <span class="like-username">${like.user_username}</span>
-                </div>
-            `;
-            likesList.appendChild(likeElement);
-        });
     })
     .catch(error => {
         console.error('Error loading likes:', error);
-        likesList.innerHTML = '<div class="like-item">Error loading likes.</div>';
+        const likesList = document.getElementById(`likes-list-${post.id}`);
+        if (likesList) {
+            likesList.innerHTML = '<div class="like-item">Error loading likes.</div>';
+        }
+    });
+    
+    return postItem;
+}
+
+function loadPosts() {
+    if (state.isLoading) return;
+    state.isLoading = true;
+
+    const container = document.getElementById('posts-container');
+    if (!container) {
+        console.error('Posts container not found');
+        state.isLoading = false;
+        return;
+    }
+    
+    container.innerHTML = '<li class="loading">Loading posts...</li>';
+
+    let url = `/api/feed/?page=${state.currentPage}&_=${Date.now()}`;
+    
+    if (state.currentFilter === 'following') {
+        url += '&followed=true';
+    } else if (state.currentFilter === 'liked') {
+        url += '&liked=true';
+    }
+    
+    if (state.currentPostType) {
+        url += `&post_type=${state.currentPostType}`;
+    }
+
+    fetch(url, {
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRFToken': state.csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(handleAPIResponse)
+    .then(data => {
+        container.innerHTML = '';
+
+        if (data.results && Array.isArray(data.results)) {
+            if (data.results.length === 0) {
+                container.innerHTML = '<li class="post"><div class="post-content">No posts found.</div></li>';
+            } else {
+                data.results.forEach(post => {
+                    container.appendChild(createPostElement(post));
+                });
+            }
+
+            const prevPage = document.getElementById('prev-page');
+            const nextPage = document.getElementById('next-page');
+            
+            if (prevPage) prevPage.disabled = !data.previous;
+            if (nextPage) nextPage.disabled = !data.next;
+        } else {
+            throw new Error('Invalid response format');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading posts:', error);
+        container.innerHTML = '<li class="post"><div class="post-content">Error loading posts. Please try again.</div></li>';
+        
+        if (error.status === 401) {
+            window.location.href = '/login/';
+        }
+    })
+    .finally(() => {
+        state.isLoading = false;
     });
 }
+
+// Make functions available globally for profile.js
+window.createPostElement = createPostElement;
+
+async function toggleFollow(username, button) {
+    if (state.isLoading) return;
+    state.isLoading = true;
+
+    const isFollowing = button.classList.contains('following');
+    
+    try {
+        const response = await fetch(`/api/profiles/${username}/follow/`, {
+            method: isFollowing ? 'DELETE' : 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRFToken': state.csrfToken
+            }
+        });
+
+        const data = await handleAPIResponse(response);
+
+        if (response.ok) {
+            button.classList.toggle('following');
+            button.textContent = isFollowing ? 'Follow' : 'Following';
+        }
+    } catch (error) {
+        console.error('Error toggling follow:', error);
+        alert(error.message || 'Error toggling follow. Please try again.');
+    } finally {
+        state.isLoading = false;
+    }
+}
+
 
 function toggleComments(postId) {
     const commentsSection = document.getElementById(`comments-${postId}`);
@@ -624,10 +734,10 @@ function createCommentElement(comment) {
     div.className = 'comment';
     div.innerHTML = `
         <div class="comment-header">
-            <span class="comment-author">${comment.author_username}</span>
+            <a href="/profile/${comment.author_username}/" class="comment-author">${comment.author_username}</a>
             <span class="comment-time">${new Date(comment.created_at).toLocaleDateString()}</span>
         </div>
-        <div class="comment-content">${comment.content || comment.text}</div>
+        <div class="comment-content">${comment.text}</div>
     `;
     return div;
 }
@@ -650,7 +760,7 @@ function submitComment(postId, inputElement) {
             'X-CSRFToken': state.csrfToken
         },
         body: JSON.stringify({ 
-            content: content,
+            text: content,
             post: postId
         })
     })
@@ -672,6 +782,62 @@ function submitComment(postId, inputElement) {
     });
 }
 
+function fetchLikes(postId) {
+    fetch(`/api/posts/${postId}/like/`, {
+        credentials: 'include',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRFToken': state.csrfToken
+        }
+    })
+    .then(handleAPIResponse)
+    .then(likes => {
+        const likesList = document.getElementById(`likes-list-${postId}`);
+        if (likesList) {
+            likesList.innerHTML = '';
+            if (likes.length === 0) {
+                likesList.innerHTML = '<div class="like-item">No likes yet</div>';
+                return;
+            }
+            likes.forEach(like => {
+                const likeElement = document.createElement('div');
+                likeElement.className = 'like-item';
+                likeElement.innerHTML = `
+                    <div class="like-user">
+                        <div class="avatar"></div>
+                        <a href="/profile/${like.user_username}/" class="like-username">${like.user_username}</a>
+                    </div>
+                `;
+                likesList.appendChild(likeElement);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error loading likes:', error);
+        const likesList = document.getElementById(`likes-list-${postId}`);
+        if (likesList) {
+            likesList.innerHTML = '<div class="like-item">Error loading likes.</div>';
+        }
+    });
+}
+
+function toggleLikes(postId) {
+    const likesSection = document.getElementById(`likes-${postId}`);
+    if (likesSection.style.display === 'none') {
+        likesSection.style.display = 'block';
+        fetchLikes(postId);
+    } else {
+        likesSection.style.display = 'none';
+    }
+}
+
+function handleCommentInput(event, postId, inputElement) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitComment(postId, inputElement);
+    }
+}
+
 async function toggleLike(postId, event) {
     if (state.isLoading) return;
     state.isLoading = true;
@@ -687,8 +853,12 @@ async function toggleLike(postId, event) {
             credentials: 'include',
             headers: {
                 'Accept': 'application/json',
+                'Content-Type': 'application/json',
                 'X-CSRFToken': state.csrfToken
-            }
+            },
+            body: JSON.stringify({
+                post: postId
+            })
         });
 
         // If 201, like was created

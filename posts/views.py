@@ -8,6 +8,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.generics import ListAPIView
+from rest_framework.authtoken.models import Token
 from django.contrib.auth.models import User, Group
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth import authenticate, login, logout
@@ -16,13 +18,16 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
-from rest_framework.authtoken.models import Token
 from .models import Post, Comment, Like, UserFollow
-from .serializers import UserSerializer, PostSerializer, CommentSerializer, LikeSerializer
+from .serializers import (UserSerializer, PostSerializer, CommentSerializer, 
+                        LikeSerializer, UserProfileSerializer)
 from .permissions import IsPostAuthor, IsCommentAuthor, IsAdminUser, ReadOnly
 from singletons.logger_singleton import LoggerSingleton
 from singletons.config_manager import ConfigManager
 from factories.post_factory import PostFactory
+
+# Initialize logger
+logger = LoggerSingleton().get_logger()
 
 class UserDetail(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
@@ -277,6 +282,8 @@ class CommentListCreate(APIView):
         try:
             data = request.data.copy()
             data['author'] = request.user.id
+            if 'content' in data:
+                data['text'] = data.pop('content')
 
             serializer = CommentSerializer(data=data)
             if serializer.is_valid():
@@ -320,6 +327,34 @@ class LoginView(APIView):
             {'error': 'Username and password are required'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
+
+@login_required
+def profile_view(request, username=None):
+    """Render the profile page"""
+    try:
+        if username is None:
+            user = request.user
+        else:
+            user = User.objects.get(username=username)
+            
+        profile = user.profile
+        is_following = UserFollow.objects.filter(follower=request.user, followed=user).exists()
+        
+        return render(request, 'posts/profile.html', {
+            'user': request.user,
+            'profile': profile,
+            'is_following': is_following,
+            'is_admin': request.user.groups.filter(name='Admin').exists()
+        })
+            
+    except User.DoesNotExist:
+        messages.error(request, 'User not found')
+        return redirect('home')
+    except Exception as e:
+        logger = LoggerSingleton().get_logger()
+        logger.error(f"Error in profile_view: {str(e)}")
+        messages.error(request, 'Error loading profile')
+        return redirect('home')
 
 def login_view(request):
     """Handle login and signup forms, and render the login page"""
@@ -376,8 +411,13 @@ def home_view(request):
     """Render the home page with news feed"""
     # Check if user is in admin group
     is_admin = request.user.groups.filter(name='Admin').exists()
+    
+    # Get user profile
+    profile = request.user.profile
+    
     return render(request, 'posts/home.html', {
         'user': request.user,
+        'profile': profile,
         'is_admin': is_admin
     })
 
@@ -402,18 +442,22 @@ class PostLikeView(APIView):
         """Like a post"""
         post = get_object_or_404(Post, pk=pk)
         
-        # Check if user already liked the post
-        if Like.objects.filter(user=request.user, post=post).exists():
-            return Response(
-                {"error": "You have already liked this post"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        like = Like(user=request.user, post=post)
-        like.save()
+        data = {
+            'user': request.user.id,
+            'post': post.id
+        }
         
-        serializer = LikeSerializer(like)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        serializer = LikeSerializer(data=data)
+        if serializer.is_valid():
+            like = serializer.save()
+            return Response(
+                LikeSerializer(like).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
         
     def delete(self, request, pk):
         """Unlike a post"""
@@ -447,30 +491,44 @@ class NewsFeedView(ListAPIView):
 
     def get_queryset(self):
         """Get filtered queryset based on request parameters"""
-        # Get query parameters
-        show_followed = self.request.query_params.get('followed', 'false').lower() == 'true'
-        show_liked = self.request.query_params.get('liked', 'false').lower() == 'true'
-        post_type = self.request.query_params.get('post_type', None)
-        
-        # Start with all posts
-        queryset = Post.objects.all()
-        
-        # Apply filters
-        if show_followed:
-            followed_users = UserFollow.objects.filter(follower=self.request.user).values_list('followed', flat=True)
-            queryset = queryset.filter(author__in=followed_users)
+        try:
+            # Get query parameters
+            show_followed = self.request.query_params.get('followed', 'false').lower() == 'true'
+            show_liked = self.request.query_params.get('liked', 'false').lower() == 'true'
+            post_type = self.request.query_params.get('post_type', None)
             
-        if show_liked:
-            liked_posts = Like.objects.filter(user=self.request.user).values_list('post', flat=True)
-            queryset = queryset.filter(id__in=liked_posts)
+            # Start with all posts
+            queryset = Post.objects.all()
             
-        if post_type:
-            queryset = queryset.filter(post_type=post_type)
-        
-        # Sort by most recent and optimize with prefetch
-        return queryset.order_by('-created_at')\
-            .select_related('author')\
-            .prefetch_related('comments', 'likes')
+            # Apply filters
+            if show_followed:
+                followed_users = UserFollow.objects.filter(follower=self.request.user).values_list('followed', flat=True)
+                queryset = queryset.filter(author__in=followed_users)
+                
+            if show_liked:
+                liked_posts = Like.objects.filter(user=self.request.user).values_list('post', flat=True)
+                queryset = queryset.filter(id__in=liked_posts)
+                
+            if post_type:
+                queryset = queryset.filter(post_type=post_type)
+            
+            # Sort by most recent and optimize with prefetch
+            return queryset.order_by('-created_at')\
+                .select_related('author')\
+                .prefetch_related('comments', 'likes')
+                
+        except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error in NewsFeedView.get_queryset: {str(e)}")
+            raise
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error in NewsFeedView.list: {str(e)}")
+            raise
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -486,11 +544,12 @@ def post_comments(request, post_id):
     elif request.method == 'POST':
         try:
             # Create the comment
-            serializer = CommentSerializer(data={
-                'content': request.data.get('content', ''),
+            comment_data = {
+                'text': request.data.get('text', ''),  # Get text from request
                 'author': request.user.id,
                 'post': post.id
-            })
+            }
+            serializer = CommentSerializer(data=comment_data)
             if serializer.is_valid():
                 comment = serializer.save()
                 return Response(
@@ -510,6 +569,160 @@ def post_comments(request, post_id):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class UserProfileView(APIView):
+    """Handle user profile operations"""
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, username=None):
+        """Get user profile data"""
+        try:
+            if username is None:
+                user = request.user
+            else:
+                user = User.objects.get(username=username)
+            
+            profile = user.profile
+            serializer = UserProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+            
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error in UserProfileView.get: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while fetching the profile'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def post(self, request, username=None):
+        """Update user profile data"""
+        try:
+            if username and username != request.user.username:
+                return Response(
+                    {"error": "Cannot update other user's profile"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+                
+            user = request.user
+            profile = user.profile
+            data = request.data
+            
+            # Update basic user fields
+            if 'full_name' in data:
+                names = data['full_name'].split(' ', 1)
+                user.first_name = names[0]
+                user.last_name = names[1] if len(names) > 1 else ''
+                user.save()
+                
+            # Update profile fields
+            if 'bio' in data:
+                profile.bio = data['bio']
+            if 'location' in data:
+                profile.location = data['location']
+            if 'website' in data:
+                profile.website = data['website']
+
+            # Handle media files
+            if 'avatar' in request.FILES:
+                profile.avatar = request.FILES['avatar']
+            if 'cover_photo' in request.FILES:
+                profile.cover_photo = request.FILES['cover_photo']
+                
+            profile.save()
+            
+            # Return updated profile data
+            serializer = UserProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error in UserProfileView.post: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while updating the profile'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UserProfilePostsView(APIView):
+    """Handle profile-specific post operations"""
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, username):
+        """Get user posts based on tab query parameter (posts/media/liked)"""
+        try:
+            user = get_object_or_404(User, username=username)
+            tab = request.GET.get('tab', 'posts')
+            
+            if tab == 'posts':
+                posts = Post.objects.filter(author=user)
+            elif tab == 'media':
+                posts = Post.objects.filter(author=user, post_type__in=['image', 'video'])
+            elif tab == 'liked':
+                liked_posts = Like.objects.filter(user=user).values_list('post', flat=True)
+                posts = Post.objects.filter(id__in=liked_posts)
+            else:
+                return Response({"error": "Invalid tab"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            posts = posts.order_by('-created_at')
+            serializer = PostSerializer(posts, many=True, context={'request': request})
+            return Response({'results': serializer.data})
+            
+        except Exception as e:
+            logger = LoggerSingleton().get_logger()
+            logger.error(f"Error in UserProfilePostsView.get: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while fetching posts'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UserFollowView(APIView):
+    """Handle follow/unfollow operations"""
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, username):
+        """Follow a user"""
+        target_user = get_object_or_404(User, username=username)
+        
+        if target_user == request.user:
+            return Response({"error": "Cannot follow yourself"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create follow relationship if it doesn't exist    
+        UserFollow.objects.get_or_create(follower=request.user, followed=target_user)
+        
+        # Get updated followers count
+        followers_count = UserFollow.objects.filter(followed=target_user).count()
+            
+        return Response({
+            'success': True,
+            'followers_count': followers_count
+        })
+
+    def delete(self, request, username):
+        """Unfollow a user"""
+        target_user = get_object_or_404(User, username=username)
+        
+        if target_user == request.user:
+            return Response({"error": "Cannot unfollow yourself"}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Remove follow relationship if it exists
+        UserFollow.objects.filter(follower=request.user, followed=target_user).delete()
+        
+        # Get updated followers count  
+        followers_count = UserFollow.objects.filter(followed=target_user).count()
+            
+        return Response({
+            'success': True,
+            'followers_count': followers_count
+        })
 
 class APIDocsView(APIView):
     """API Documentation view"""
