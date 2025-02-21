@@ -68,14 +68,14 @@
     <div id="createPostModal" style="display: none;" role="dialog" aria-labelledby="createPostTitle" aria-hidden="true">
         <div class="modal-content">
             <button onclick="closeCreatePostModal()" class="modal-close">&times;</button>
-            <h2 class="modal-title" id="createPostTitle">Create Post</h2>
+            <h3 class="modal-title" id="createPostTitle">Create Post</h3>
             <div class="modal-form">
                 <select id="postType" onchange="toggleMediaInput()">
                     <option value="text">Text Post</option>
                     <option value="image">Image Post</option>
                     <option value="video">Video Post</option>
                 </select>
-                <input type="text" id="postTitle" placeholder="Post Title (optional)">
+                <input type="text" id="postTitle" class="form-input" placeholder="Post Title (optional)">
                 <textarea id="postContent" placeholder="Write something..."></textarea>
                 
                 <div id="mediaInputs" style="display: none;">
