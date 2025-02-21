@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-secret-key-here')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.onrender.com', 'connectly.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.onrender.com', 'connectlyipt.onrender.com']
 
 # Application definition
 INSTALLED_APPS = [
@@ -85,14 +85,14 @@ CORS_ALLOWED_ORIGINS = [
     'https://localhost:8000',
     'http://localhost:8000',
     'https://*.onrender.com',
-    'https://connectly.onrender.com',
+    'https://connectlyipt.onrender.com',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://localhost:8000',
     'http://localhost:8000',
     'https://*.onrender.com',
-    'https://connectly.onrender.com',
+    'https://connectlyipt.onrender.com',
 ]
 
 if DEBUG:
