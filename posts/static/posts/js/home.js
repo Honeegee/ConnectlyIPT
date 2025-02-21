@@ -131,7 +131,7 @@ function deletePost(postId) {
         return;
     }
 
-    fetch(`/api/posts/${postId}/`, {
+    fetch(`api/posts/${postId}/`, {
         method: 'DELETE',
             credentials: 'same-origin',
         headers: {
@@ -171,8 +171,8 @@ function editPost(postId) {
             return;
         }
 
-        fetch(`/api/posts/${postId}/`, {
-            method: 'PUT',
+    fetch(`api/posts/${postId}/`, {
+        method: 'PUT',
         credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/json',
@@ -335,7 +335,7 @@ function createPost() {
             formData.append('metadata', JSON.stringify(metadata));
             formData.append('media', mediaFile);
 
-            fetch('/api/posts/', {
+            fetch('api/posts/', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -541,7 +541,7 @@ function createPostElement(post) {
         </div>
     `;
     
-    fetch(`/api/posts/${post.id}/like/`, {
+    fetch(`api/posts/${post.id}/like/`, {
             credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json',
@@ -595,7 +595,7 @@ function loadPosts() {
     
     container.innerHTML = '<li class="loading">Loading posts...</li>';
 
-    let url = `/api/feed/?page=${state.currentPage}&_=${Date.now()}`;
+    let url = `api/feed/?page=${state.currentPage}&_=${Date.now()}`;
     
     if (state.currentFilter === 'following') {
         url += '&followed=true';
@@ -660,7 +660,7 @@ async function toggleFollow(username, button) {
     const isFollowing = button.classList.contains('following');
     
     try {
-        const response = await fetch(`/api/profiles/${username}/follow/`, {
+        const response = await fetch(`api/profiles/${username}/follow/`, {
             method: isFollowing ? 'DELETE' : 'POST',
             credentials: 'same-origin',
             headers: {
@@ -699,7 +699,7 @@ function loadComments(postId) {
     const commentsList = document.getElementById(`comments-list-${postId}`);
     commentsList.innerHTML = '<div class="loading">Loading comments...</div>';
 
-    fetch(`/api/posts/${postId}/comments/`, {
+    fetch(`api/posts/${postId}/comments/`, {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -751,7 +751,7 @@ function submitComment(postId, inputElement) {
 
     inputElement.disabled = true;
 
-    fetch(`/api/posts/${postId}/comments/`, {
+    fetch(`api/posts/${postId}/comments/`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -783,7 +783,7 @@ function submitComment(postId, inputElement) {
 }
 
 function fetchLikes(postId) {
-    fetch(`/api/posts/${postId}/like/`, {
+    fetch(`api/posts/${postId}/like/`, {
         credentials: 'include',
         headers: {
             'Accept': 'application/json',
@@ -805,7 +805,7 @@ function fetchLikes(postId) {
                 likeElement.innerHTML = `
                     <div class="like-user">
                         <div class="avatar"></div>
-                        <a href="/profile/${like.user_username}/" class="like-username">${like.user_username}</a>
+                        <a href="profile/${like.user_username}/" class="like-username">${like.user_username}</a>
                     </div>
                 `;
                 likesList.appendChild(likeElement);
@@ -893,7 +893,7 @@ async function toggleLike(postId, event) {
         alert(error.message || 'Error toggling like. Please try again.');
         
         if (error.status === 401) {
-            window.location.href = '/login/';
+            window.location.href = 'login/';
         }
     } finally {
         button.disabled = false;

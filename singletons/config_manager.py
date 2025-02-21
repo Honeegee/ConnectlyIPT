@@ -9,7 +9,7 @@ class ConfigManager:
 
     def _initialize(self):
         self.settings = {
-            "DEFAULT_PAGE_SIZE": 20,
+            "DEFAULT_PAGE_SIZE": 5,
             "ENABLE_ANALYTICS": True,
             "RATE_LIMIT": 100,
             "MAX_POST_LENGTH": 5000,

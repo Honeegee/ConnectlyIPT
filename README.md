@@ -1,20 +1,27 @@
 # Connectly API
 
-A Django REST Framework API with enhanced security features and design patterns, utilizing Django's built-in User model for authentication and authorization.
+A Django REST Framework API with enhanced security features and design patterns, including a modern frontend interface. Utilizes Django's built-in User model extended with custom UserProfile for enhanced user features.
 
 ## Features
 
 ### Authentication & User Management
-- Uses Django's built-in User model (`django.contrib.auth.models.User`)
+- Uses Django's built-in User model with custom UserProfile extension
+- OAuth2 integration with Google
 - Secure password hashing with Argon2
 - Token-based authentication
 - User roles and permissions
+- Profile customization (avatar, cover photo)
 
+### Core Features
 - Full CRUD operations for Posts and Comments
+- Social features (Like, Follow)
 - Role-Based Access Control (RBAC)
 - Token-based authentication
 - Password encryption
 - SSL/HTTPS support
+- Modern frontend templates
+- Responsive design
+- Real-time updates
 - Design Patterns:
   - Singleton Pattern (Configuration & Logging)
   - Factory Pattern (Post Creation)
@@ -95,13 +102,32 @@ python manage.py runserver_plus --cert-file cert.pem --key-file key.pem
 ### Post Model
 - Foreign Key to User model (author)
 - Post types: text, image, video
+- Media attachments
 - Metadata handling
 - Author-only permissions
+- Like functionality
+- Comment threading
 
 ### Comment Model
 - Foreign Key to User model (author)
 - Foreign Key to Post model
 - Author-only permissions
+- Like functionality
+
+### UserProfile Model
+- One-to-One with User model
+- Customizable avatar
+- Cover photo
+- Bio and additional user info
+- Follow functionality
+
+### Like Model
+- Generic foreign key (supports both posts and comments)
+- User relationship tracking
+
+### UserFollow Model
+- Follower-Following relationship tracking
+- User stats (followers count, following count)
 
 ## Design Patterns
 

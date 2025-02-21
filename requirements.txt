@@ -13,3 +13,7 @@ google-auth-httplib2>=0.2.0
 requests>=2.31.0
 python-dotenv>=1.0.1
 cryptography>=42.0.2
+Pillow>=10.2.0
+python-magic>=0.4.27
+factory-boy>=3.3.0
+coverage>=7.4.1

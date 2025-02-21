@@ -19,13 +19,15 @@ urlpatterns = [
     # Admin URL
     path('admin/', admin.site.urls),
     
-    # Frontend URLs
+      # Frontend URLs
     path('', home_view, name='home'),  # Root URL showing news feed
     path('login/', login_view, name='login'),  # Login page with Google OAuth
-    path('logout/', logout_view, name='logout'),  # Logout
-    
+    path('logout/', logout_view, name='logout'),  # Logout    
     # OAuth URLs - social-auth-django handles the main flow
     path('social-auth/', include('social_django.urls', namespace='social')),
     path('auth/google/', GoogleOAuth2LoginView.as_view(), name='google_login'),  # Manual token verification endpoint
     path('oauth/complete/', OAuthCompleteView.as_view(), name='oauth_complete'),  # Callback endpoint
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) if settings.DEBUG else []
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
