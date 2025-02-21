@@ -73,11 +73,33 @@ class UserListCreate(APIView):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                # Create user with hashed password
+                # Get the password from request data
+                password = request.data.get('password')
+                
+                # Password validation
+                if not password:
+                    return Response({'error': 'Password is required.'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                if len(password) < 8:
+                    return Response({'error': 'Password must be at least 8 characters long.'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                if not any(char.isupper() for char in password):
+                    return Response({'error': 'Password must contain at least one uppercase letter.'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                if not any(char.islower() for char in password):
+                    return Response({'error': 'Password must contain at least one lowercase letter.'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                if not any(char.isdigit() for char in password):
+                    return Response({'error': 'Password must contain at least one number.'}, status=status.HTTP_400_BAD_REQUEST)
+                    
+                if not any(not char.isalnum() for char in password):
+                    return Response({'error': 'Password must contain at least one special character.'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Create user with validated password
                 user = User.objects.create_user(
                     username=serializer.validated_data['username'],
                     email=serializer.validated_data['email'],
-                    password=request.data.get('password')
+                    password=password
                 )
                 
                 # Create auth token for the new user
@@ -372,7 +394,7 @@ def login_view(request):
             
             user = authenticate(request, username=username, password=password)
             if user is not None:
-                login(request, user)
+                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 logger.info(f"User {username} logged in successfully")
                 return redirect('home')
             else:
@@ -383,15 +405,61 @@ def login_view(request):
             email = request.POST.get('email')
             password = request.POST.get('password')
             
+            # Validate password
+            if not password:
+                messages.error(request, 'Password is required.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            # Password validation rules
+            if len(password) < 8:
+                messages.error(request, 'Password must be at least 8 characters long.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            if not any(char.isupper() for char in password):
+                messages.error(request, 'Password must contain at least one uppercase letter.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            if not any(char.islower() for char in password):
+                messages.error(request, 'Password must contain at least one lowercase letter.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            if not any(char.isdigit() for char in password):
+                messages.error(request, 'Password must contain at least one number.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            if not any(not char.isalnum() for char in password):
+                messages.error(request, 'Password must contain at least one special character.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+            
+            # Validate email
+            if not email:
+                messages.error(request, 'Email is required.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            # Validate username
+            if not username:
+                messages.error(request, 'Username is required.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+                
+            if len(username) < 3:
+                messages.error(request, 'Username must be at least 3 characters long.')
+                return render(request, 'posts/login.html', {'google_oauth2_client_id': client_id})
+            
             try:
                 # Create new user
                 user = User.objects.create_user(username=username, email=email, password=password)
-                # Log them in
-                login(request, user)
+                # Log them in with the correct backend
+                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
                 logger.info(f"New user {username} registered and logged in")
+                messages.success(request, 'Account created successfully!')
                 return redirect('home')
-            except IntegrityError:
-                messages.error(request, 'Username already exists.')
+            except IntegrityError as e:
+                if 'username' in str(e):
+                    messages.error(request, 'Username already exists. Please choose a different username.')
+                elif 'email' in str(e):
+                    messages.error(request, 'Email already exists. Please use a different email.')
+                else:
+                    messages.error(request, 'Username or email already exists.')
             except Exception as e:
                 logger.error(f"Error creating user: {str(e)}")
                 messages.error(request, 'Error creating account. Please try again.')
