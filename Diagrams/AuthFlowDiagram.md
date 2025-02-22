@@ -1,94 +1,121 @@
+# Authentication and Authorization Flow Diagram
+
 ```mermaid
 sequenceDiagram
-    participant Client as Frontend Client
-    participant API as Backend API
-    participant Google as Google OAuth
+    participant C as Client
+    participant API as API Layer
+    participant TS as TokenService
+    participant P as Permissions
     participant DB as Database
-    participant Email as Email Service
+
+    %% Login Flow
+    C->>API: Submit Login Credentials
+    API->>TS: Validate Credentials
+    alt Valid Credentials
+        TS-->>API: Credentials Valid
+        API->>TS: Generate Token
+        TS-->>API: Return Token
+        API-->>C: Token Returned (Authorization Successful)
+    else Invalid Credentials
+        TS-->>API: Credentials Invalid
+        API-->>C: 401 Unauthorized
+    end
+
+    %% API Request Flow
+    C->>API: Send API Request with Token
+    API->>TS: Validate Token (via Middleware)
+    
+    alt Valid Token
+        TS-->>API: Token Valid
+        API->>P: Check User Role/Access
+        
+        alt Access Granted
+            P-->>API: Access Granted
+            API->>DB: Execute Request
+            DB-->>API: Return Data
+            API-->>C: Authorized Response (200 OK)
+        else Access Denied
+            P-->>API: Access Denied
+            API-->>C: 403 Forbidden
+        end
+        
+    else Invalid Token
+        TS-->>API: Token Invalid
+        API-->>C: 401 Unauthorized
+    end
 
     %% Google OAuth Flow
-    alt Google OAuth Authentication
-        Client->>API: 1. Request OAuth URL
-        API-->>Client: 2. Return Google OAuth URL
-        Client->>Google: 3. Redirect to Google login
-        Google-->>Client: 4. Return authorization code
-        Client->>API: 5. Send authorization code
-        API->>Google: 6. Exchange code for tokens
-        Google-->>API: 7. Return access & ID tokens
-        
-        API->>API: 8. Verify token & extract user info
-        API->>DB: 9. Check if user exists
-        DB-->>API: 10. User status
-        
-        alt New User
-            API->>DB: 11a. Create new user
-            API->>Email: 11b. Send welcome email
-        else Existing User
-            API->>DB: 11c. Update last login
-        end
-        
-        API->>DB: 12. Create/Update Django session
-        API->>DB: 13. Log authentication event
-        API-->>Client: 14. Return JWT + user data
-        
-        alt Error Handling
-            Google-->>Client: E1. OAuth cancelled
-            Google-->>API: E2. Invalid code
-            API-->>Client: E3. Account creation failed
-        end
+    Note over C,API: Google OAuth Flow
+    C->>API: Google Sign In Request
+    API->>TS: Validate Google Token
+    
+    alt Valid Google Email (@mmdc.mcl.edu.ph)
+        TS-->>API: Email Domain Valid
+        API->>DB: Get/Create User
+        DB-->>API: User Data
+        API->>TS: Generate Token
+        TS-->>API: Return Token
+        API-->>C: Token + User Data
+    else Invalid Email Domain
+        TS-->>API: Invalid Domain
+        API-->>C: 401 Unauthorized
     end
+```
 
-    %% Traditional Login Flow
-    alt Traditional Authentication
-        Client->>API: 1. Send username/password
-        API->>API: 2. Validate input format
-        
-        alt Valid Input
-            API->>DB: 3. django.contrib.auth.authenticate
-            DB-->>API: 4. User data
-            
-            alt Success
-                API->>DB: 5a. Create Django session
-                API->>DB: 5b. Update last login
-                API-->>Client: 6. Return JWT + user data
-            else Invalid Credentials
-                API-->>Client: 7. Auth error (401)
-            end
-        else Invalid Input
-            API-->>Client: 8. Validation error (400)
-        end
-    end
+## Authentication Flows
 
-    %% Password Reset Flow
-    alt Password Reset
-        Client->>API: 1. Request password reset
-        API->>DB: 2. Verify email exists
-        API->>DB: 3. Generate reset token using Django's PasswordResetTokenGenerator
-        API->>Email: 4. Send reset email
-        Email-->>Client: 5. Reset link
-        
-        Client->>API: 6. Submit new password with token
-        API->>DB: 7. Verify reset token
-        API->>DB: 8. Update password
-        API-->>Client: 9. Confirmation
-    end
+### Regular Authentication
+1. User can authenticate through:
+   - Login form (username/password)
+   - Signup form (create new account)
+2. After successful authentication:
+   - Generate authentication token
+   - Create user session
+   - Return token and user data
 
-    %% JWT Refresh
-    alt Token Refresh
-        Client->>API: 1. Request token refresh
-        API->>DB: 2. Validate refresh token
-        alt Valid Token
-            API->>DB: 3a. Generate new access token
-            API-->>Client: 4a. New access token
-        else Invalid Token
-            API-->>Client: 3b. Invalid token error
-        end
-    end
+### Google OAuth2 Authentication
+1. User clicks Google Sign In button
+2. Redirected to Google login page
+3. After Google authentication:
+   - Get Google OAuth2 token
+   - Verify token on server
+   - Check email domain (@mmdc.mcl.edu.ph only)
+   - Get existing user or create new one
+   - Generate authentication token
+   - Create user session
+   - Return token and user data
 
-    %% Logout Flow
-    alt Logout
-        Client->>API: 1. Logout request
-        API->>DB: 2. Invalidate Django session
-        API->>DB: 3. Log logout event
-        API-->>Client: 4. Logout success
-    end
+### Token Authentication (API)
+1. Client includes token in Authorization header
+2. Server verifies token for each API request
+3. Grant or deny access based on token validity
+
+### Session Authentication (Web)
+1. Server creates session after authentication
+2. Client receives session cookie
+3. Client includes cookie in subsequent requests
+4. Server verifies session for each web request
+5. Grant or deny access based on session validity
+
+## Security Measures
+
+1. Password Requirements:
+   - Minimum 8 characters
+   - At least one uppercase letter
+   - At least one lowercase letter
+   - At least one number
+   - At least one special character
+
+2. Email Restrictions:
+   - Google OAuth limited to @mmdc.mcl.edu.ph domain
+   - Email verification required
+
+3. Token Security:
+   - Unique per user
+   - Included in Authorization header
+   - Required for all API endpoints (except login/signup)
+
+4. Session Security:
+   - Secure cookie flags
+   - HTTPS only
+   - Session timeout
