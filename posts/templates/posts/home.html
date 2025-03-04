@@ -8,13 +8,23 @@
 </head>
 <body data-is-admin="{{ is_admin|lower }}" data-username="{{ user.username }}">
     {% csrf_token %}
+    {% if messages %}
+    <div class="messages" id="messages-container">
+        {% for message in messages %}
+        <div class="message {% if message.tags %}{{ message.tags }}{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
     <nav class="navbar">
         <a href="/" class="navbar-brand">
             <img src="{% static 'posts/images/ConnectlyLogo.png' %}" alt="Connectly" class="logo">
             Connectly
         </a>
         <div class="navbar-menu">
-            <a href="{% url 'profile' %}" id="user-profile">{{ user.username }}</a>
+            <a href="{% url 'user-profile' username=user.username %}" id="user-profile">{{ user.username }}</a>
             <a href="{% url 'logout' %}">Logout</a>
         </div>
     </nav>

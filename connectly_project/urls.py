@@ -11,22 +11,23 @@ from django.conf.urls.static import static
 from posts.views import APIDocsView, login_view, home_view, logout_view
 from posts.social_auth import GoogleOAuth2LoginView, OAuthCompleteView
 
+from posts.urls import frontend_urlpatterns, api_urlpatterns
+
 urlpatterns = [
-    # API endpoints first for proper routing
-    path('api/', include('posts.urls')),  # API endpoints
-    path('api/docs/', APIDocsView.as_view(), name='api_docs'),  # API documentation
-    
     # Admin URL
     path('admin/', admin.site.urls),
     
-      # Frontend URLs
-    path('', home_view, name='home'),  # Root URL showing news feed
-    path('login/', login_view, name='login'),  # Login page with Google OAuth
-    path('logout/', logout_view, name='logout'),  # Logout    
-    # OAuth URLs - social-auth-django handles the main flow
+    # API endpoints
+    path('api/', include(api_urlpatterns)),
+    path('api/docs/', APIDocsView.as_view(), name='api_docs'),
+    
+    # OAuth URLs
     path('social-auth/', include('social_django.urls', namespace='social')),
-    path('auth/google/', GoogleOAuth2LoginView.as_view(), name='google_login'),  # Manual token verification endpoint
-    path('oauth/complete/', OAuthCompleteView.as_view(), name='oauth_complete'),  # Callback endpoint
+    path('auth/google/', GoogleOAuth2LoginView.as_view(), name='google_login'),
+    path('oauth/complete/', OAuthCompleteView.as_view(), name='oauth_complete'),
+    
+    # Frontend URLs
+    path('', include(frontend_urlpatterns)),
 ]
 
 # Serve media files in both development and production

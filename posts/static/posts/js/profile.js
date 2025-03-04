@@ -214,7 +214,7 @@ async function saveProfile() {
     const username = document.body.getAttribute('data-username');
     
     try {
-        const response = await fetch(`/api/profiles/me/`, {
+            const response = await fetch(`/api/profiles/me/`, {
             method: 'POST',
             credentials: 'include',
             headers: {

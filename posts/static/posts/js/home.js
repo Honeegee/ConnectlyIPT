@@ -18,6 +18,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         state.csrfToken = csrfElement.value;
 
+        // Handle auto-dismissing messages
+        const messagesContainer = document.getElementById('messages-container');
+        if (messagesContainer) {
+            setTimeout(() => {
+                messagesContainer.style.opacity = '0';
+                messagesContainer.style.transform = 'translate(-50%, -100%)';
+                setTimeout(() => {
+                    messagesContainer.remove();
+                }, 300);
+            }, 3000);
+        }
+
         // Only initialize posts functionality if we're on the home page
         const postsContainer = document.getElementById('posts-container');
         if (postsContainer) {
@@ -131,7 +143,7 @@ function deletePost(postId) {
         return;
     }
 
-    fetch(`api/posts/${postId}/`, {
+    fetch(`/api/posts/${postId}/`, {
         method: 'DELETE',
             credentials: 'same-origin',
         headers: {
@@ -350,7 +362,7 @@ function createPost() {
                 state.isLoading = false;
             });
         } else {
-            fetch('/api/posts/', {
+            fetch('api/posts/', {
                 method: 'POST',
             credentials: 'same-origin',
                 headers: {
@@ -443,6 +455,14 @@ function setupFilterListeners() {
             item.classList.add('active');
             state.currentFilter = item.dataset.filter;
             state.currentPage = 1;
+            
+            // Reset post type when 'all' filter is selected
+            if (state.currentFilter === 'all') {
+                state.currentPostType = '';
+                document.querySelectorAll('.menu-item[data-type]').forEach(i => i.classList.remove('active'));
+                state.currentPage = 1;
+            }
+            
             loadPosts();
         });
     });
@@ -487,7 +507,7 @@ function createPostElement(post) {
         <div class="post-header">
             <div class="avatar"></div>
             <div class="post-info">
-                <a href="/profile/${post.author_username}/" class="post-author">${post.author_username}</a>
+                <span class="post-author">${post.author_username}</span>
                 <div class="post-time">${date}</div>
             </div>
             ${!isOwnPost ? `
@@ -641,9 +661,8 @@ function loadPosts() {
         console.error('Error loading posts:', error);
         container.innerHTML = '<li class="post"><div class="post-content">Error loading posts. Please try again.</div></li>';
         
-        if (error.status === 401) {
-            window.location.href = '/login/';
-        }
+        // We don't redirect on 401 error anymore since messages need to be visible
+        // The message will auto-dismiss and user will be redirected by Django's authentication system
     })
     .finally(() => {
         state.isLoading = false;
@@ -805,7 +824,7 @@ function fetchLikes(postId) {
                 likeElement.innerHTML = `
                     <div class="like-user">
                         <div class="avatar"></div>
-                        <a href="profile/${like.user_username}/" class="like-username">${like.user_username}</a>
+                        <a href="/profile/${like.user_username}/" class="like-username">${like.user_username}</a>
                     </div>
                 `;
                 likesList.appendChild(likeElement);
@@ -848,7 +867,7 @@ async function toggleLike(postId, event) {
 
     try {
         // First try to create a like
-        const createResponse = await fetch(`/api/posts/${postId}/like/`, {
+        const createResponse = await fetch(`api/posts/${postId}/like/`, {
             method: 'POST',
             credentials: 'include',
             headers: {
@@ -868,7 +887,7 @@ async function toggleLike(postId, event) {
         } 
         // If 400, post is already liked - try to unlike
         else if (createResponse.status === 400) {
-            const deleteResponse = await fetch(`/api/posts/${postId}/like/`, {
+            const deleteResponse = await fetch(`api/posts/${postId}/like/`, {
                 method: 'DELETE',
                 credentials: 'include',
                 headers: {

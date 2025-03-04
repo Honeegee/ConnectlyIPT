@@ -1,161 +1,173 @@
 # API CRUD Interaction Flow Diagram
 
 ```mermaid
-graph LR
-    %% Nodes Definition
-    Browser[Client Browser or Postman]
-    Request[Request Received]
-    Validate[Input Validation]
-    Security[Security Middleware: Token & Permissions]
-    UserCRUD[User Operations]
-    PostCRUD[Post Operations]
-    CommentCRUD[Comment Operations]
-    ProfileCRUD[Profile Operations]
-    Login[Login Request]
-    Token[Token Generation]
-    DB[(Database SQL/NoSQL)]
-    Logger[Singleton Logger]
-    Factory[Factory Pattern]
-
-    %% Subgraphs
-    subgraph Client
-        Browser
+flowchart TB
+    %% Main components
+    Browser["Client Browser"]
+    
+    %% API Gateway layer
+    subgraph APIGateway["API Gateway"]
+        direction TB
+        Request["Request<br>Received"]
+        Validate["Input<br>Validation"]
+        Security["Security Middleware:<br>Token & Permissions"]
+        Login["Login<br>Request"]
+        Token["Token<br>Generation"]
     end
-
-    subgraph API_Layer
-        Request
-        Validate
-        Security
+    
+    %% Service layer
+    subgraph Services["Service Layer"]
+        direction TB
+        Factory["Service<br>Factory"]
         
-        subgraph CRUD_Logic
-            subgraph Users_API
-                UserCRUD -->|GET /users| U1[List Users]
-                UserCRUD -->|POST /users| U2[Create User]
-                UserCRUD -->|GET /users/:id| U3[Get User]
-                UserCRUD -->|PUT /users/:id| U4[Update User]
-                UserCRUD -->|DELETE /users/:id| U5[Delete User]
-            end
-
-            subgraph Posts_API
-                PostCRUD -->|GET /posts| P1[List Posts]
-                PostCRUD -->|POST /posts| P2[Create Post]
-                PostCRUD -->|GET /posts/:id| P3[Get Post]
-                PostCRUD -->|PUT /posts/:id| P4[Update Post]
-                PostCRUD -->|DELETE /posts/:id| P5[Delete Post]
-                PostCRUD -->|GET /feed| P6[News Feed]
-                PostCRUD -->|POST /posts/:id/like| P7[Like Post]
-                PostCRUD -->|DELETE /posts/:id/like| P8[Unlike Post]
-            end
-
-            subgraph Comments_API
-                CommentCRUD -->|GET /comments| C1[List Comments]
-                CommentCRUD -->|POST /comments| C2[Create Comment]
-                CommentCRUD -->|GET /comments/:id| C3[Get Comment]
-                CommentCRUD -->|PUT /comments/:id| C4[Update Comment]
-                CommentCRUD -->|DELETE /comments/:id| C5[Delete Comment]
-                CommentCRUD -->|GET /posts/:id/comments| C6[Post Comments]
-                CommentCRUD -->|POST /posts/:id/comments| C7[Add Comment]
-            end
-
-            subgraph Profiles_API
-                ProfileCRUD -->|GET /profiles/me| PR1[My Profile]
-                ProfileCRUD -->|GET /profiles/:username| PR2[User Profile]
-                ProfileCRUD -->|POST /profiles/:username| PR3[Update Profile]
-                ProfileCRUD -->|GET /profiles/:username/posts| PR4[User Posts]
-                ProfileCRUD -->|POST /profiles/:username/follow| PR5[Follow]
-                ProfileCRUD -->|DELETE /profiles/:username/unfollow| PR6[Unfollow]
-            end
+        subgraph UserService["User Service"]
+            direction TB
+            UserCRUD["User<br>Operations"]
+        end
+        
+        subgraph PostService["Post Service"]
+            direction TB
+            PostCRUD["Post<br>Operations"] 
+        end
+        
+        subgraph CommentService["Comment Service"]
+            direction TB
+            CommentCRUD["Comment<br>Operations"]
+        end
+        
+        subgraph ProfileService["Profile Service"]
+            direction TB
+            ProfileCRUD["Profile<br>Operations"]
         end
     end
-
-    %% Main Flow
-    Browser -->|HTTPS Request| Request
-    Request --> Validate
-    Validate -->|Valid Request| Security
-    Validate -->|Invalid Input| Logger
     
-    Security -->|Unauthorized| Browser
-    Security -->|Authorized Request| CRUD_Logic
-
-    %% Auth Flow
-    Login -->|POST /api/login| Token
-    Token -->|POST /api/token| Security
-
-    %% Data Layer Flow
-    UserCRUD --> DB
-    PostCRUD --> DB
-    CommentCRUD --> DB
-    ProfileCRUD --> DB
-
-    %% Factory Pattern
-    Factory --> UserCRUD
-    Factory --> PostCRUD
-    Factory --> CommentCRUD
-    Factory --> ProfileCRUD
-
-    %% Logging Flow
-    UserCRUD -->|Log Operations| Logger
-    PostCRUD -->|Log Operations| Logger
-    CommentCRUD -->|Log Operations| Logger
-    ProfileCRUD -->|Log Operations| Logger
-
-    %% Response Flow
-    DB -->|Response Data| CRUD_Logic
-    CRUD_Logic -->|Send Response| Browser
-
+    %% Data layer
+    subgraph DataLayer["Data Layer"]
+        direction TB
+        DB[("Database<br>SQL/NoSQL")]
+        Logger["Singleton<br>Logger"]
+    end
+    
+    %% Endpoint details
+    subgraph UserEndpoints["User Endpoints"]
+        direction LR
+        U1["GET /users<br>List Users"]
+        U2["POST /users<br>Create User"]
+        U3["GET /users/:id<br>Get User"]
+        U4["PUT /users/:id<br>Update User"]
+        U5["DELETE /users/:id<br>Delete User"]
+    end
+    
+    subgraph PostEndpoints["Post Endpoints"]
+        direction LR
+        P1["GET /posts<br>List Posts"]
+        P2["POST /posts<br>Create Post"]
+        P3["GET /posts/:id<br>Get Post"]
+        P4["PUT /posts/:id<br>Update Post"]
+        P5["DELETE /posts/:id<br>Delete Post"]
+        P6["GET /feed<br>News Feed"]
+        P7["POST /posts/:id/like<br>Like Post"]
+        P8["DELETE /posts/:id/like<br>Unlike Post"]
+    end
+    
+    subgraph CommentEndpoints["Comment Endpoints"]
+        direction LR
+        C1["GET /comments<br>List Comments"]
+        C2["POST /comments<br>Create Comment"]
+        C3["GET /comments/:id<br>Get Comment"]
+        C4["PUT /comments/:id<br>Update Comment"]
+        C5["DELETE /comments/:id<br>Delete Comment"]
+        C6["GET /posts/:id/comments<br>Post Comments"]
+        C7["POST /posts/:id/comments<br>Add Comment"]
+    end
+    
+    subgraph ProfileEndpoints["Profile Endpoints"]
+        direction LR
+        PR1["GET /profiles/me<br>My Profile"]
+        PR2["GET /profiles/:username<br>User Profile"]
+        PR3["POST /profiles/:username<br>Update Profile"]
+        PR4["GET /profiles/:username/posts<br>User Posts"]
+        PR5["POST /profiles/:username/follow<br>Follow"]
+        PR6["DELETE /profiles/:username/unfollow<br>Unfollow"]
+    end
+    
+    %% Core flow connections
+    Browser <-->|"HTTPS Request/Response"| APIGateway
+    Request --> Validate
+    Validate -->|"Valid Request"| Security
+    Validate -->|"Invalid Input"| Logger
+    Security -->|"Unauthorized"| Browser
+    Security -->|"Authorized Request"| Factory
+    
+    %% Auth flow
+    Login -->|"POST /api/login"| Token
+    Token -->|"POST /api/token"| Security
+    
+    %% Factory pattern connections
+    Factory --> UserService
+    Factory --> PostService
+    Factory --> CommentService
+    Factory --> ProfileService
+    
+    %% Service to data layer connections
+    UserCRUD <--> DB
+    PostCRUD <--> DB
+    CommentCRUD <--> DB
+    ProfileCRUD <--> DB
+    
+    %% Logger connections
+    UserCRUD -->|"Log<br>Operations"| Logger
+    PostCRUD -->|"Log<br>Operations"| Logger
+    CommentCRUD -->|"Log<br>Operations"| Logger
+    ProfileCRUD -->|"Log<br>Operations"| Logger
+    
+    %% Connect services to endpoints
+    UserCRUD --- UserEndpoints
+    PostCRUD --- PostEndpoints
+    CommentCRUD --- CommentEndpoints
+    ProfileCRUD --- ProfileEndpoints
+    
     %% Styling
-    classDef clientNode fill:#f9f,stroke:#333,stroke-width:2px,color:#000
-    classDef middleware fill:#bbf,stroke:#333,stroke-width:2px,color:#000
-    classDef operation fill:#dfd,stroke:#333,stroke-width:1px,color:#000
-    classDef database fill:#fdd,stroke:#333,stroke-width:2px,color:#000
-    classDef utility fill:#dff,stroke:#333,stroke-width:1px,color:#000
-    classDef endpoint fill:#efe,stroke:#333,stroke-width:1px,color:#000
-
+    classDef clientNode fill:#f9f,stroke:#333,stroke-width:3px,color:#000
+    classDef middleware fill:#bbf,stroke:#333,stroke-width:3px,color:#000
+    classDef service fill:#dfd,stroke:#333,stroke-width:3px,color:#000
+    classDef database fill:#fdd,stroke:#333,stroke-width:3px,color:#000
+    classDef utility fill:#dff,stroke:#333,stroke-width:3px,color:#000
+    classDef endpoint fill:#efe,stroke:#333,stroke-width:3px,color:#000
+    classDef gateway fill:#ffd,stroke:#333,stroke-width:3px,color:#000
+    classDef factory fill:#ffb,stroke:#333,stroke-width:3px,color:#000
+    
+    %% Apply classes
     class Browser clientNode
-    class Security,Validate middleware
-    class UserCRUD,PostCRUD,CommentCRUD,ProfileCRUD operation
+    class Security,Validate,Login,Token,Request middleware
+    class UserCRUD,PostCRUD,CommentCRUD,ProfileCRUD service
     class DB database
-    class Logger,Factory utility
+    class Logger utility
+    class Factory factory
+    class APIGateway gateway
     class U1,U2,U3,U4,U5,P1,P2,P3,P4,P5,P6,P7,P8,C1,C2,C3,C4,C5,C6,C7,PR1,PR2,PR3,PR4,PR5,PR6 endpoint
 
-```
+        %% Enhanced arrow colors
 
-## API Endpoints Summary
+    linkStyle 0 stroke:#9B59B6,stroke-width:3px
+    linkStyle 1 stroke:#9B59B6,stroke-width:3px
+    linkStyle 2 stroke:#9B59B6,stroke-width:3px
+    linkStyle 3 stroke:#9B59B6,stroke-width:3px
+    linkStyle 4 stroke:#9B59B6,stroke-width:3px
+    linkStyle 5 stroke:#9B59B6,stroke-width:3px
+    linkStyle 6 stroke:#9B59B6,stroke-width:3px
+    linkStyle 7 stroke:#9B59B6,stroke-width:3px
+    linkStyle 8 stroke:#9B59B6,stroke-width:3px
+    linkStyle 9 stroke:#9B59B6,stroke-width:3px
+    linkStyle 10 stroke:#9B59B6,stroke-width:3px
+    linkStyle 11 stroke:#9B59B6,stroke-width:3px
+    linkStyle 12 stroke:#9B59B6,stroke-width:3px
+    linkStyle 13 stroke:#9B59B6,stroke-width:3px
+    linkStyle 14 stroke:#9B59B6,stroke-width:3px
+    linkStyle 15 stroke:#9B59B6,stroke-width:3px
+    linkStyle 16 stroke:#9B59B6,stroke-width:3px
+    linkStyle 17 stroke:#9B59B6,stroke-width:3px
+    linkStyle 18 stroke:#9B59B6,stroke-width:3px
+    linkStyle 19 stroke:#9B59B6,stroke-width:3px
 
-### Authentication
-- `POST /api/login/` - User login
-- `POST /api/token/` - Obtain authentication token
 
-### Users
-- `GET /api/users/` - List all users
-- `POST /api/users/` - Create new user
-- `GET /api/users/{id}/` - Get user details
-- `PUT /api/users/{id}/` - Update user
-- `DELETE /api/users/{id}/` - Delete user
-
-### Posts
-- `GET /api/posts/` - List all posts
-- `POST /api/posts/` - Create new post
-- `GET /api/posts/{id}/` - Get post details
-- `PUT /api/posts/{id}/` - Update post
-- `DELETE /api/posts/{id}/` - Delete post
-- `POST /api/posts/{id}/like/` - Like a post
-- `DELETE /api/posts/{id}/like/` - Unlike a post
-- `GET /api/feed/` - Get personalized news feed
-
-### Comments
-- `GET /api/comments/` - List all comments
-- `POST /api/comments/` - Create new comment
-- `GET /api/comments/{id}/` - Get comment details
-- `PUT /api/comments/{id}/` - Update comment
-- `DELETE /api/comments/{id}/` - Delete comment
-- `GET /api/posts/{id}/comments/` - Get comments for a post
-- `POST /api/posts/{id}/comments/` - Add comment to a post
-
-### Profiles
-- `GET /api/profiles/me/` - Get own profile
-- `GET /api/profiles/{username}/` - Get user profile
-- `POST /api/profiles/{username}/` - Update profile
-- `GET /api/profiles/{username}/posts/` - Get user's posts
-- `POST /api/profiles/{username}/follow/` - Follow user
-- `DELETE /api/profiles/{username}/unfollow/` - Unfollow user

@@ -50,10 +50,16 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-5. Run with SSL:
+5. Generate SSL certificates for local development:
+```bash
+python generate_ssl.py
+```
+
+6. Run with SSL:
 ```bash
 python manage.py runserver_plus --cert-file cert.pem --key-file key.pem
 ```
+Note: The SSL certificates (cert.pem and key.pem) are generated for local development only. For production, use properly signed certificates.
 
 ## API Endpoints
 

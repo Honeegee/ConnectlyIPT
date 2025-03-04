@@ -354,10 +354,13 @@ class LoginView(APIView):
 def profile_view(request, username=None):
     """Render the profile page"""
     try:
+        if username is None and request.user.is_authenticated:
+            return redirect('user-profile', username=request.user.username)
+            
         if username is None:
-            user = request.user
-        else:
-            user = User.objects.get(username=username)
+            return redirect('login')
+            
+        user = User.objects.get(username=username)
             
         profile = user.profile
         is_following = UserFollow.objects.filter(follower=request.user, followed=user).exists()
@@ -492,6 +495,7 @@ def home_view(request):
 def logout_view(request):
     """Handle user logout"""
     logout(request)
+    messages.success(request, 'You have been successfully logged out.')
     return redirect('login')
 
 class PostLikeView(APIView):

@@ -40,6 +40,52 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700&display=swap');
 
+/* Messages */
+.messages {
+    position: fixed;
+    top: var(--navbar-height);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    width: auto;
+    max-width: 500px;
+    padding: 16px;
+    margin: 8px;
+    border-radius: var(--border-radius-md);
+    background: white;
+    box-shadow: var(--shadow);
+    animation: slideDown 0.3s ease-out;
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    opacity: 1;
+}
+
+.message {
+    padding: 12px 16px;
+    border-radius: var(--border-radius-sm);
+    background: var(--primary-light);
+    color: white;
+    font-size: 0.9rem;
+}
+
+.message.success {
+    background: #22c55e;
+}
+
+.message.error {
+    background: #ef4444;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translate(-50%, -100%);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+}
+
 /* Base Styles */
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
