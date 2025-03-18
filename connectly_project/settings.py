@@ -120,6 +120,15 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'posts.utils.custom_exception_handler'
 }
 
+# Cache settings
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'TIMEOUT': 300,  # 5 minutes cache timeout
+    }
+}
+
 # Middleware
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

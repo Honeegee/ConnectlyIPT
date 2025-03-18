@@ -606,6 +606,9 @@ class FeedPagination(PageNumberPagination):
     max_page_size = 100
 
 from rest_framework.generics import ListAPIView
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+from django.core.cache import cache
 
 class NewsFeedView(ListAPIView):
     """Get personalized news feed for authenticated user"""
@@ -613,15 +616,26 @@ class NewsFeedView(ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PostSerializer
     pagination_class = FeedPagination
-    
+
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
 
+    def get_cache_key(self):
+        """Generate a unique cache key based on user and filters"""
+        user_id = self.request.user.id
+        params = self.request.query_params
+        return f'feed_{user_id}_{params.get("followed")}_{params.get("liked")}_{params.get("post_type")}'
+
     def get_queryset(self):
-        """Get filtered queryset based on request parameters"""
+        """Get filtered queryset based on request parameters with caching"""
         try:
+            # Try to get cached queryset
+            cache_key = self.get_cache_key()
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                return cached_data
             # Get query parameters
             show_followed = self.request.query_params.get('followed', 'false').lower() == 'true'
             show_liked = self.request.query_params.get('liked', 'false').lower() == 'true'
@@ -651,15 +665,20 @@ class NewsFeedView(ListAPIView):
                 queryset = queryset.filter(post_type=post_type)
             
             # Sort by most recent and optimize with prefetch
-            return queryset.order_by('-created_at')\
+            queryset = queryset.order_by('-created_at')\
                 .select_related('author')\
                 .prefetch_related('comments', 'likes')
+                
+            # Cache the queryset
+            cache.set(cache_key, queryset, timeout=300)  # 5 minutes cache
+            return queryset
                 
         except Exception as e:
             logger = LoggerSingleton().get_logger()
             logger.error(f"Error in NewsFeedView.get_queryset: {str(e)}")
             raise
     
+    @method_decorator(cache_page(300))  # Cache for 5 minutes
     def list(self, request, *args, **kwargs):
         try:
             return super().list(request, *args, **kwargs)
