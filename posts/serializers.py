@@ -1,6 +1,6 @@
 import json
 from rest_framework import serializers
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from .models import Post, Comment, Like, UserProfile
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -50,10 +50,36 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return None
 
 class UserSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(choices=['admin', 'user', 'guest'], default='user')
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'date_joined']
-        read_only_fields = ['date_joined']
+        fields = ['id', 'username', 'email', 'password', 'role']
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def create(self, validated_data):
+        role = validated_data.pop('role', 'user')
+        password = validated_data.pop('password')
+        user = User.objects.create_user(**validated_data)
+        user.set_password(password)
+        user.save()
+
+        # Set role in profile
+        user.profile.role = role
+        user.profile.save()
+
+        # If role is admin, add to Admin group
+        if role == 'admin':
+            admin_group, _ = Group.objects.get_or_create(name='Admin')
+            user.groups.add(admin_group)
+            user.save()
+
+        return user
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['role'] = instance.profile.role
+        return ret
 
 class LikeSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
@@ -90,13 +116,13 @@ class PostSerializer(serializers.ModelSerializer):
             return False
         # User can edit if they're the author or an admin
         return (obj.author == request.user or 
-                request.user.groups.filter(name='Admin').exists())
+                request.user.profile.role == 'admin')
 
     class Meta:
         model = Post
         fields = ['id', 'title', 'content', 'author', 'author_username', 'created_at', 'comments', 
                  'like_count', 'comment_count', 'post_type', 'metadata', 'media', 'media_url',
-                 'can_edit', 'is_following']
+                 'can_edit', 'is_following', 'privacy']
         read_only_fields = ['created_at', 'media_url']
         
     def get_media_url(self, obj):
@@ -128,11 +154,9 @@ class PostSerializer(serializers.ModelSerializer):
             
             data['metadata'] = metadata
 
-        # Media validation is handled in the model's clean method
         return data
 
     def create(self, validated_data):
-        # Create post instance (media is handled in the view)
         return Post.objects.create(**validated_data)
         
     def get_like_count(self, obj):

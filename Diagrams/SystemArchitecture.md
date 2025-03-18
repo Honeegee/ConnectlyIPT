@@ -43,9 +43,9 @@ graph TB
     end
 
     %% Client to Application Layer connections
-    WebClient -->|HTTP/HTTPS| AuthService
-    WebClient -->|HTTP/HTTPS| PostService
-    WebClient -->|HTTP/HTTPS| FeedService
+    WebClient -->|HTTPS| AuthService
+    WebClient -->|HTTPS| PostService
+    WebClient -->|HTTPS| FeedService
     APIClient -->|REST API| AuthService
     APIClient -->|REST API| PostService
     APIClient -->|REST API| FeedService

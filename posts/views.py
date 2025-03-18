@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, SAFE_METHODS
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -73,8 +73,9 @@ class UserListCreate(APIView):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                # Get the password from request data
+                # Get the password and role from request data
                 password = request.data.get('password')
+                role = request.data.get('role', 'user')
                 
                 # Password validation
                 if not password:
@@ -95,17 +96,15 @@ class UserListCreate(APIView):
                 if not any(not char.isalnum() for char in password):
                     return Response({'error': 'Password must contain at least one special character.'}, status=status.HTTP_400_BAD_REQUEST)
                 
-                # Create user with validated password
-                user = User.objects.create_user(
-                    username=serializer.validated_data['username'],
-                    email=serializer.validated_data['email'],
-                    password=password
-                )
+                # Create user with validated password and role
+                user = serializer.save()
                 
                 # Create auth token for the new user
                 token, _ = Token.objects.get_or_create(user=user)
                 
+                # Prepare response data with role from profile
                 response_data = UserSerializer(user).data
+                response_data['role'] = user.profile.role
                 response_data['token'] = token.key
                 
                 return Response(response_data, status=status.HTTP_201_CREATED)
@@ -126,11 +125,24 @@ class UserListCreate(APIView):
 
 class PostDetail(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsPostAuthor]
+    permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    def get_permissions(self):
+        if self.request.method not in SAFE_METHODS:
+            self.permission_classes = [IsAuthenticated, IsPostAuthor]
+        return [permission() for permission in self.permission_classes]
     def get(self, request, pk):
         """Retrieve a post"""
         post = get_object_or_404(Post, pk=pk)
+        
+        # Check privacy settings
+        if post.privacy == 'private' and post.author != request.user and request.user.profile.role != 'admin':
+            return Response(
+                {"error": "This post is private"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
         serializer = PostSerializer(post, context={'request': request})
         return Response(serializer.data)
 
@@ -174,6 +186,15 @@ class PostListCreate(APIView):
         super().__init__()
         self.logger = LoggerSingleton().get_logger()
         self.config = ConfigManager()
+        
+    def get_permissions(self):
+        """Check permissions with special handling for guest users"""
+        # First, check if user is a guest for any write operations
+        if hasattr(self.request, 'user') and self.request.user.profile.role == 'guest':
+            if self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+                # Guest users can only perform read operations
+                return [ReadOnly()]
+        return [permission() for permission in self.permission_classes]
 
     def get(self, request):
         """List all posts with their comments"""
@@ -193,6 +214,14 @@ class PostListCreate(APIView):
 
     def post(self, request):
         """Create a new post with optional media"""
+        # Check if user is a guest before any operation
+        if request.user.profile.role == 'guest':
+            return Response(
+                {'error': 'Guest users cannot create posts'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # For non-guest users, proceed with post creation
         try:
             with transaction.atomic():
                 # Prepare post data
@@ -289,6 +318,15 @@ class CommentDetail(APIView):
 class CommentListCreate(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        """Check permissions with special handling for guest users"""
+        # Guest users can only perform read operations
+        if hasattr(self.request, 'user') and self.request.user.profile.role == 'guest':
+            if self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+                return [ReadOnly()]
+        return [permission() for permission in self.permission_classes]
+
     def get(self, request):
         """List comments, optionally filtered by post"""
         post_id = request.query_params.get('post')
@@ -301,6 +339,13 @@ class CommentListCreate(APIView):
 
     def post(self, request):
         """Create a new comment"""
+        # Check if user is a guest
+        if request.user.profile.role == 'guest':
+            return Response(
+                {'error': 'Guest users cannot create comments'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         try:
             data = request.data.copy()
             data['author'] = request.user.id
@@ -503,6 +548,13 @@ class PostLikeView(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
     
+    def get_permissions(self):
+        """Check permissions with special handling for guest users"""
+        if hasattr(self.request, 'user') and self.request.user.profile.role == 'guest':
+            if self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+                return [ReadOnly()]
+        return [permission() for permission in self.permission_classes]
+    
     def get(self, request, pk):
         """Get likes for a post"""
         post = get_object_or_404(Post, pk=pk)
@@ -512,8 +564,14 @@ class PostLikeView(APIView):
     
     def post(self, request, pk):
         """Like a post"""
+        # Check if user is a guest
+        if request.user.profile.role == 'guest':
+            return Response(
+                {'error': 'Guest users cannot like posts'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         post = get_object_or_404(Post, pk=pk)
-        
         data = {
             'user': request.user.id,
             'post': post.id
@@ -569,8 +627,16 @@ class NewsFeedView(ListAPIView):
             show_liked = self.request.query_params.get('liked', 'false').lower() == 'true'
             post_type = self.request.query_params.get('post_type', None)
             
-            # Start with all posts
-            queryset = Post.objects.all()
+            # Start with base queryset considering privacy
+            if self.request.user.profile.role == 'admin':
+                # Admins can see all posts
+                queryset = Post.objects.all()
+            else:
+                # Others can see public posts and their own private posts
+                queryset = Post.objects.filter(
+                    models.Q(privacy='public') | 
+                    models.Q(privacy='private', author=self.request.user)
+                )
             
             # Apply filters
             if show_followed:
@@ -758,8 +824,22 @@ class UserFollowView(APIView):
     authentication_classes = [TokenAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
     
+    def get_permissions(self):
+        """Check permissions with special handling for guest users"""
+        if hasattr(self.request, 'user') and self.request.user.profile.role == 'guest':
+            if self.request.method not in ['GET', 'HEAD', 'OPTIONS']:
+                return [ReadOnly()]
+        return [permission() for permission in self.permission_classes]
+    
     def post(self, request, username):
         """Follow a user"""
+        # Check if user is a guest
+        if request.user.profile.role == 'guest':
+            return Response(
+                {'error': 'Guest users cannot follow other users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         target_user = get_object_or_404(User, username=username)
         
         if target_user == request.user:
@@ -779,6 +859,13 @@ class UserFollowView(APIView):
 
     def delete(self, request, username):
         """Unfollow a user"""
+        # Check if user is a guest
+        if request.user.profile.role == 'guest':
+            return Response(
+                {'error': 'Guest users cannot unfollow users'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         target_user = get_object_or_404(User, username=username)
         
         if target_user == request.user:

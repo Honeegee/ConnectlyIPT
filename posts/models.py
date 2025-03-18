@@ -8,12 +8,18 @@ from singletons.config_manager import ConfigManager
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
 class UserProfile(models.Model):
+    ROLE_CHOICES = [
+        ('admin', 'Administrator'),
+        ('user', 'Regular User'),
+        ('guest', 'Guest User'),
+    ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(max_length=500, blank=True)
     location = models.CharField(max_length=100, blank=True)
     website = models.URLField(max_length=200, blank=True)
     avatar = models.ImageField(upload_to='profile_avatars/', null=True, blank=True)
     cover_photo = models.ImageField(upload_to='profile_covers/', null=True, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -39,7 +45,13 @@ class Post(models.Model):
         ('video', 'Video Post'),
     ]
     
+    PRIVACY_CHOICES = [
+        ('public', 'Public'),
+        ('private', 'Private'),
+    ]
+    
     title = models.CharField(max_length=200, null=True, blank=True, default="Untitled Post")
+    privacy = models.CharField(max_length=10, choices=PRIVACY_CHOICES, default='public')
     content = models.TextField()
     author = models.ForeignKey(User, related_name='posts', on_delete=models.CASCADE)
     media = models.FileField(upload_to='post_media/', null=True, blank=True)
